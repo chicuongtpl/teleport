@@ -231,7 +231,10 @@ func (t *terminal) Run(ctx context.Context) error {
 		defer close(t.childStderrDone)
 		defer stderrR.Close()
 
-		childErr, err := reexec.ReadChildError(stderrR)
+		childErr, err := reexec.ReadChildError(stderrR, &reexec.ErrorContext{
+			DecisionContext: t.serverContext.Identity.AccessPermit.DecisionContext,
+			Login:           t.serverContext.Identity.Login,
+		})
 		if err != nil {
 			t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
 		} else if childErr != "" {
