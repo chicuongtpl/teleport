@@ -1037,15 +1037,9 @@ func (a *ahLoginChecker) evaluateScopedSSHAccess(ident *sshca.Identity, ca types
 		bpfEvents = append(bpfEvents, event)
 	}
 
-	hostUsersInfo, err := checker.Common().HostUsers(target)
+	hostUsersDecision, err := checker.Common().HostUsers(target)
 	if err != nil {
-		if !trace.IsAccessDenied(err) {
-			return nil, trace.Wrap(err)
-		}
-		// the way host user creation permissions currently work, an "access denied" just indicates
-		// that host user creation is disabled, and does not indicate that access should be disallowed.
-		// for the purposes of the decision service, we represent this disabled state as nil.
-		hostUsersInfo = nil
+		return nil, trace.Wrap(err)
 	}
 
 	return &decisionpb.SSHAccessPermit{
@@ -1064,7 +1058,11 @@ func (a *ahLoginChecker) evaluateScopedSSHAccess(ident *sshca.Identity, ca types
 		MappedRoles:           accessInfo.Roles,
 		HostSudoers:           hostSudoers,
 		BpfEvents:             bpfEvents,
-		HostUsersInfo:         hostUsersInfo,
+		HostUsersInfo:         hostUsersDecision.Info,
+		DecisionContext: &decisionpb.SSHAccessPermitContext{
+			HostUserCreationAllowedBy: hostUsersDecision.AllowedBy,
+			HostUserCreationDeniedBy:  hostUsersDecision.DeniedBy,
+		},
 	}, nil
 }
 
@@ -1152,15 +1150,9 @@ func (a *ahLoginChecker) evaluateSSHAccess(ident *sshca.Identity, ca types.CertA
 		bpfEvents = append(bpfEvents, event)
 	}
 
-	hostUsersInfo, err := accessChecker.HostUsers(target)
+	hostUsersDecision, err := accessChecker.HostUsers(target)
 	if err != nil {
-		if !trace.IsAccessDenied(err) {
-			return nil, trace.Wrap(err)
-		}
-		// the way host user creation permissions currently work, an "access denied" just indicates
-		// that host user creation is disabled, and does not indicate that access should be disallowed.
-		// for the purposes of the decision service, we represent this disabled state as nil.
-		hostUsersInfo = nil
+		return nil, trace.Wrap(err)
 	}
 
 	return &decisionpb.SSHAccessPermit{
@@ -1179,8 +1171,12 @@ func (a *ahLoginChecker) evaluateSSHAccess(ident *sshca.Identity, ca types.CertA
 		MappedRoles:           accessInfo.Roles,
 		HostSudoers:           hostSudoers,
 		BpfEvents:             bpfEvents,
-		HostUsersInfo:         hostUsersInfo,
+		HostUsersInfo:         hostUsersDecision.Info,
 		Preconditions:         preconds,
+		DecisionContext: &decisionpb.SSHAccessPermitContext{
+			HostUserCreationAllowedBy: hostUsersDecision.AllowedBy,
+			HostUserCreationDeniedBy:  hostUsersDecision.DeniedBy,
+		},
 	}, nil
 }
 
