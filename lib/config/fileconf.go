@@ -1318,12 +1318,21 @@ func (a *AuthenticationConfig) Parse() (types.AuthPreference, error) {
 		AllowLocalAuth:             a.LocalAuth,
 		AllowPasswordless:          a.Passwordless,
 		AllowHeadless:              a.Headless,
+<<<<<<< HEAD
 		AllowBrowserAuthentication: a.AllowBrowserAuthentication,
 		DeviceTrust:                dt,
 		DefaultSessionTTL:          a.DefaultSessionTTL,
 		HardwareKey:                h,
 		SignatureAlgorithmSuite:    a.SignatureAlgorithmSuite,
 		StableUnixUserConfig:       stableUNIXUserConfig,
+=======
+		AllowBrowserAuthentication: a.BrowserAuthentication,
+		DeviceTrust:                dt,
+		DefaultSessionTTL:       a.DefaultSessionTTL,
+		HardwareKey:             h,
+		SignatureAlgorithmSuite: a.SignatureAlgorithmSuite,
+		StableUnixUserConfig:    stableUNIXUserConfig,
+>>>>>>> f5df2e43c84 ([Browser MFA] Add protobuf and config)
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)

@@ -2950,6 +2950,20 @@ message ListSnowflakeSessionsResponse {
   string next_page_token = 2;
 }
 
+// ValidateBrowserMFAChallengeRequest is used to validate an MFA response
+// during a browser-based MFA authentication flow.
+message ValidateBrowserMFAChallengeRequest {
+  BrowserMFAResponse browser_mfa_response = 1;
+}
+
+// ValidateBrowserMFAChallengeResponse contains the redirect URL to send
+// the user back to after successfully completing browser-based MFA authentication.
+message ValidateBrowserMFAChallengeResponse {
+  // tsh_redirect_url is the callback URL to tsh's local HTTP server with the encrypted WebAuthn response.
+  // Format: http://127.0.0.1:[random_port]/callback?response={encrypted_webauthn_response}
+  string tsh_redirect_url = 1;
+}
+
 // AuthService is authentication/authorization service implementation
 service AuthService {
   // InventoryControlStream is the per-instance stream used to advertise teleport instance
@@ -3851,4 +3865,7 @@ service AuthService {
   // by the proxy on behalf of a cluster that wishes to join to this one as a
   // leaf cluster.
   rpc ValidateTrustedCluster(ValidateTrustedClusterRequest) returns (ValidateTrustedClusterResponse);
+
+  // ValidateBrowserMFAChallenge validates browser MFA challenge responses
+  rpc ValidateBrowserMFAChallenge(ValidateBrowserMFAChallengeRequest) returns (ValidateBrowserMFAChallengeResponse);
 }
