@@ -3083,6 +3083,10 @@ func (h *Handler) mfaLoginBegin(w http.ResponseWriter, r *http.Request, p httpro
 		mfaReq.ChallengeExtensions = &mfav1.ChallengeExtensions{
 			Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
 		}
+
+		if req.BrowserMFAClientRedirectURL != "" {
+			mfaReq.BrowserMFAClientRedirectURL = req.BrowserMFAClientRedirectURL
+		}
 	}
 
 	mfaChallenge, err := h.auth.proxyClient.CreateAuthenticateChallenge(r.Context(), mfaReq)

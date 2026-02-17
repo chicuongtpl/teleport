@@ -112,6 +112,8 @@ type MFAChallengeRequest struct {
 	Pass string `json:"pass"`
 	// Passwordless explicitly requests a passwordless/usernameless challenge.
 	Passwordless bool `json:"passwordless"`
+	// Browser MFA tsh redirect URL
+	BrowserMFATSHRedirectURL string `json:"browser_mfa_tsh_redirect_url,omitempty"`
 }
 
 // MFAChallengeResponse holds the response to a MFA challenge.
