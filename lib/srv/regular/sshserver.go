@@ -1791,6 +1791,11 @@ func (s *Server) handleSessionRequests(ctx context.Context, ccx *sshutils.Connec
 		case result := <-scx.ExecResultCh:
 			scx.Logger.DebugContext(ctx, "Exec request complete", "command", result.Command, "code", result.Code)
 
+			if result.Error != nil {
+				message := utils.FormatErrorWithNewline(result.Error)
+				s.writeStderr(ctx, ch, message)
+			}
+
 			// The exec process has finished and delivered the execution result, send
 			// the result back to the client, and close the session and channel.
 			_, err := trackingChan.SendRequest("exit-status", false, ssh.Marshal(struct{ C uint32 }{C: uint32(result.Code)}))

@@ -41,6 +41,7 @@ import (
 	tracessh "github.com/gravitational/teleport/api/observability/tracing/ssh"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/events"
+	"github.com/gravitational/teleport/lib/sshutils/reexec"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
@@ -61,6 +62,9 @@ type ExecResult struct {
 
 	// Code is return code that execution of the command resulted in.
 	Code int
+
+	// Error is an exit error from the child process.
+	Error error
 }
 
 // Exec executes an "exec" request.
@@ -124,7 +128,8 @@ type localExec struct {
 	Command string
 
 	// Cmd holds an *exec.Cmd which will be used for local execution.
-	Cmd *exec.Cmd
+	Cmd       *exec.Cmd
+	cmdStderr io.Reader
 
 	// Ctx holds the *ServerContext.
 	Ctx *ServerContext
@@ -183,6 +188,17 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 		return nil, trace.Wrap(err)
 	}
 
+	stderrr, stderrw, err := os.Pipe()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	defer stderrw.Close()
+	e.Cmd.Stderr = stderrw
+	e.cmdStderr = stderrr
+
+	// Ensure stderrr pipe is closed.
+	e.Ctx.AddCloser(stderrr)
+
 	// Start the command.
 	err = e.Cmd.Start()
 	if err != nil {
@@ -234,19 +250,25 @@ func (e *localExec) Wait() *ExecResult {
 	}
 
 	// Block until the command is finished executing.
-	err := e.Cmd.Wait()
-	if err != nil {
-		e.Ctx.Logger.DebugContext(e.Ctx.CancelContext(), "Local command failed", "error", err)
+	cmdErr := e.Cmd.Wait()
+	if cmdErr != nil {
+		e.Ctx.Logger.DebugContext(e.Ctx.CancelContext(), "Local command failed", "error", cmdErr)
 	} else {
 		e.Ctx.Logger.DebugContext(e.Ctx.CancelContext(), "Local command successfully executed")
 	}
 
 	// Emit the result of execution to the Audit Log.
-	emitExecAuditEvent(e.Ctx, e.GetCommand(), err)
+	emitExecAuditEvent(e.Ctx, e.GetCommand(), cmdErr)
+
+	childErr, err := reexec.ReadChildError(e.cmdStderr)
+	if err != nil {
+		e.Ctx.Logger.WarnContext(e.Ctx.CancelContext(), "Failed to get child process err", "error", err)
+	}
 
 	execResult := &ExecResult{
 		Command: e.GetCommand(),
-		Code:    exitCode(err),
+		Code:    exitCode(cmdErr),
+		Error:   childErr,
 	}
 
 	return execResult

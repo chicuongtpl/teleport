@@ -39,6 +39,7 @@ import (
 	"github.com/gravitational/teleport"
 	tracessh "github.com/gravitational/teleport/api/observability/tracing/ssh"
 	rsession "github.com/gravitational/teleport/lib/session"
+	"github.com/gravitational/teleport/lib/sshutils/reexec"
 )
 
 // LookupUser is used to mock the value returned by user.Lookup(string).
@@ -132,6 +133,7 @@ type terminal struct {
 	log *slog.Logger
 
 	cmd           *exec.Cmd
+	cmdStderr     io.ReadCloser
 	serverContext *ServerContext
 
 	pty     *os.File
@@ -211,6 +213,17 @@ func (t *terminal) Run(ctx context.Context) error {
 	// Pass the TTY to the child since a terminal is attached.
 	t.cmd.ExtraFiles = append(t.cmd.ExtraFiles, tty)
 
+	stderrr, stderrw, err := os.Pipe()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer stderrw.Close()
+	t.cmd.Stderr = stderrw
+	t.cmdStderr = stderrr
+
+	// Ensure stderrr pipe is closed.
+	t.serverContext.AddCloser(stderrr)
+
 	// Close the TTY before returning to ensure that our half of the pipe is
 	// closed. This ensures that reading from the PTY will unblock when the
 	// child process exits.
@@ -236,24 +249,17 @@ func (t *terminal) Run(ctx context.Context) error {
 
 // Wait will block until the terminal is complete.
 func (t *terminal) Wait() (*ExecResult, error) {
-	err := t.cmd.Wait()
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			status := exitErr.Sys().(syscall.WaitStatus)
-			return &ExecResult{Code: status.ExitStatus(), Command: t.cmd.Path}, nil
-		}
-		return nil, err
-	}
+	waitErr := t.cmd.Wait()
 
-	status, ok := t.cmd.ProcessState.Sys().(syscall.WaitStatus)
-	if !ok {
-		return nil, trace.Errorf("unknown exit status: %T(%v)", t.cmd.ProcessState.Sys(), t.cmd.ProcessState.Sys())
+	childErr, err := reexec.ReadChildError(t.cmdStderr)
+	if err != nil {
+		t.log.WarnContext(t.serverContext.cancelContext, "Failed to get child process err", "error", err)
 	}
 
 	return &ExecResult{
-		Code:    status.ExitStatus(),
+		Code:    exitCode(waitErr),
 		Command: t.cmd.Path,
+		Error:   childErr,
 	}, nil
 }
 
