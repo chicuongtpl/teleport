@@ -545,7 +545,12 @@ func (l *AuditLog) GetEventExportChunks(ctx context.Context, req *auditlogpb.Get
 
 // StreamSessionEvents implements [SessionStreamer].
 func (l *AuditLog) StreamSessionEvents(ctx context.Context, sessionID session.ID, startIndex int64) (chan apievents.AuditEvent, chan error) {
-	l.log.DebugContext(ctx, "StreamSessionEvents", "session_id", string(sessionID))
+	return l.StreamUploadEvents(ctx, sessionID, "", startIndex)
+}
+
+// StreamSessionEvents implements [SessionStreamer].
+func (l *AuditLog) StreamUploadEvents(ctx context.Context, sessionID session.ID, uploadID string, startIndex int64) (chan apievents.AuditEvent, chan error) {
+	l.log.DebugContext(ctx, "StreamUploadEvents", "session_id", string(sessionID), "upload_id", uploadID)
 	e := make(chan error, 1)
 	c := make(chan apievents.AuditEvent)
 
@@ -567,7 +572,7 @@ func (l *AuditLog) StreamSessionEvents(ctx context.Context, sessionID session.ID
 	reader, writer := io.Pipe()
 
 	go func() {
-		err := l.UploadHandler.Download(ctx, sessionID, writer)
+		err := l.UploadHandler.Download(ctx, sessionID, uploadID, writer)
 		if errors.Is(err, fs.ErrNotExist) {
 			err = trace.NotFound("a recording for session %v was not found", sessionID)
 		}
@@ -628,7 +633,7 @@ func (l *AuditLog) UploadEncryptedRecording(ctx context.Context, sessionID strin
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	upload, err := l.UploadHandler.CreateUpload(ctx, *sessID)
+	upload, err := l.UploadHandler.CreateUpload(ctx, *sessID, false)
 	if err != nil {
 		return trace.Wrap(err, "creating upload")
 	}

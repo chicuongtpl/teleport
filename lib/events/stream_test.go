@@ -366,7 +366,7 @@ func TestEncryptedRecordingIO(t *testing.T) {
 	out := fakeWriterAt{
 		buf: &bytes.Buffer{},
 	}
-	err = uploader.Download(ctx, sid, out)
+	err = uploader.Download(ctx, sid, "", out)
 	require.NoError(t, err)
 
 	reader := events.NewProtoReader(out.buf, encryptedIO)
@@ -788,7 +788,7 @@ func TestMergeStreams(t *testing.T) {
 				return
 			}
 			buf := &events.MemBuffer{}
-			require.NoError(t, uploader.Download(t.Context(), sessionID, buf))
+			require.NoError(t, uploader.Download(t.Context(), sessionID, "", buf))
 			reader := events.NewProtoReader(bytes.NewReader(buf.Bytes()), nil)
 			gotEvents, err := reader.ReadAll(t.Context())
 			require.NoError(t, err)

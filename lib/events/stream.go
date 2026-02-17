@@ -198,9 +198,13 @@ func (s *ProtoStreamer) CreateAuditStreamForUpload(ctx context.Context, sid sess
 	})
 }
 
+func (s *ProtoStreamer) recordingExists(ctx context.Context, sid session.ID) bool {
+	return s.cfg.SessionStreamer != nil && s.cfg.Uploader.DownloadMetadata(ctx, sid, &MemBuffer{}) == nil
+}
+
 // CreateAuditStream creates audit stream and upload
 func (s *ProtoStreamer) CreateAuditStream(ctx context.Context, sid session.ID) (apievents.Stream, error) {
-	upload, err := s.cfg.Uploader.CreateUpload(ctx, sid)
+	upload, err := s.cfg.Uploader.CreateUpload(ctx, sid, s.recordingExists(ctx, sid))
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -211,26 +215,14 @@ func (s *ProtoStreamer) CreateAuditStream(ctx context.Context, sid session.ID) (
 func (s *ProtoStreamer) ResumeAuditStream(ctx context.Context, sid session.ID, uploadID string) (apievents.Stream, error) {
 	// Note, that if the session ID does not match the upload ID,
 	// the request will fail
-	sessionExists := func() bool {
-		return s.cfg.SessionStreamer != nil && s.cfg.Uploader.DownloadMetadata(ctx, sid, &MemBuffer{}) == nil
-	}
-	log := slog.With("session_id", sid, "upload_id", uploadID)
-	upload := StreamUpload{SessionID: sid, ID: uploadID}
+	upload := StreamUpload{SessionID: sid, ID: uploadID, Intermediate: s.recordingExists(ctx, sid)}
 	parts, err := s.cfg.Uploader.ListParts(ctx, upload)
 	if trace.IsNotFound(err) {
-		if sessionExists() {
-			log.DebugContext(ctx, "Session reupload detected. Old and new recordings will be merged.")
-			return s.MergeStreams(ctx, sid)
-		}
-		log.DebugContext(ctx, "Upload missing, creating a new one.")
+		slog.DebugContext(ctx, "Upload missing, creating a new one.", "session_id", sid, "upload_id", uploadID)
 		return s.CreateAuditStream(ctx, sid)
 	}
 	if err != nil {
 		return nil, trace.Wrap(err)
-	}
-	if len(parts) == 0 && sessionExists() {
-		log.DebugContext(ctx, "Session reupload detected. Old and new recordings will be merged.")
-		return s.MergeStreams(ctx, sid)
 	}
 	return NewProtoStream(ProtoStreamConfig{
 		Upload:                    upload,

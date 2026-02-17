@@ -1124,6 +1124,8 @@ type StreamUpload struct {
 	// Initiated contains the timestamp of when the upload
 	// was initiated, not always initialized
 	Initiated time.Time
+
+	Intermediate bool
 }
 
 // String returns user friendly representation of the upload
@@ -1145,7 +1147,7 @@ func (u *StreamUpload) CheckAndSetDefaults() error {
 // MultipartUploader handles multipart uploads and downloads for session streams
 type MultipartUploader interface {
 	// CreateUpload creates a multipart upload
-	CreateUpload(ctx context.Context, sessionID session.ID) (*StreamUpload, error)
+	CreateUpload(ctx context.Context, sessionID session.ID, temporary bool) (*StreamUpload, error)
 	// CompleteUpload completes the upload
 	CompleteUpload(ctx context.Context, upload StreamUpload, parts []StreamPart) error
 	// ReserveUploadPart reserves an upload part. Reserve is used to identify
@@ -1226,6 +1228,10 @@ type SessionStreamer interface {
 	// is exhausted or the error channel reports an error, or until the context
 	// is canceled.
 	StreamSessionEvents(ctx context.Context, sessionID session.ID, startIndex int64) (chan apievents.AuditEvent, chan error)
+}
+
+type UploadStreamer interface {
+	StreamUploadEvents(ctx context.Context, sessionID session.ID, uploadID string, startIndex int64)
 }
 
 // EncryptedRecordingUploader takes a session ID and a sequence of encrypted

@@ -44,6 +44,8 @@ type Config struct {
 	OnBeforeComplete func(ctx context.Context, upload events.StreamUpload) error
 	// OpenFile is used by session recording to open OS files
 	OpenFile utils.OpenFileWithFlagsFunc
+
+	Streamer events.UploadStreamer
 }
 
 // nopBeforeComplete does nothing
@@ -117,8 +119,12 @@ func (l *Handler) Close() error {
 }
 
 // Download reads a session recording from a local directory.
-func (l *Handler) Download(ctx context.Context, sessionID session.ID, writer io.Writer) error {
-	return trace.Wrap(downloadFile(l.recordingPath(sessionID), writer))
+func (l *Handler) Download(ctx context.Context, sessionID session.ID, uploadID string, writer io.Writer) error {
+	return trace.Wrap(downloadFile(l.recordingPath(events.StreamUpload{
+		ID:           uploadID,
+		SessionID:    sessionID,
+		Intermediate: uploadID != "",
+	}), writer))
 }
 
 // DownloadSummary reads a session summary from a local directory.
@@ -163,7 +169,7 @@ func downloadFile(path string, writer io.Writer) error {
 
 // Upload writes a session recording to a local directory.
 func (l *Handler) Upload(ctx context.Context, sessionID session.ID, reader io.Reader) (string, error) {
-	s, err := uploadFile(l.recordingPath(sessionID), reader)
+	s, err := uploadFile(l.recordingPath(events.StreamUpload{SessionID: sessionID}), reader)
 	return s, trace.Wrap(err)
 }
 
@@ -234,8 +240,11 @@ func uploadFile(path string, reader io.Reader, opts ...fileUploadOption) (string
 	return fmt.Sprintf("%v://%v", teleport.SchemeFile, path), nil
 }
 
-func (l *Handler) recordingPath(sessionID session.ID) string {
-	return filepath.Join(l.Directory, string(sessionID)+tarExt)
+func (l *Handler) recordingPath(upload events.StreamUpload) string {
+	if upload.Intermediate {
+		return filepath.Join(l.uploadRootPath(upload), string(upload.SessionID)+tarExt)
+	}
+	return filepath.Join(l.Directory, string(upload.SessionID)+tarExt)
 }
 
 func (l *Handler) pendingSummariesPath() string {

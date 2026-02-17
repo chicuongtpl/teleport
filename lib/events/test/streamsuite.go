@@ -186,7 +186,7 @@ func StreamEmpty(t *testing.T, handler events.MultipartHandler) {
 	require.NoError(t, err)
 	defer os.Remove(f.Name())
 
-	require.True(t, trace.IsNotFound(handler.Download(ctx, sid, f)))
+	require.True(t, trace.IsNotFound(handler.Download(ctx, sid, "", f)))
 }
 
 // StreamWithParameters tests stream upload and subsequent download and reads the results
@@ -249,7 +249,7 @@ func StreamWithParameters(t *testing.T, handler events.MultipartHandler, params 
 	defer os.Remove(f.Name())
 	defer f.Close()
 
-	err = handler.Download(ctx, sid, f)
+	err = handler.Download(ctx, sid, "", f)
 	require.NoError(t, err)
 
 	_, err = f.Seek(0, 0)
@@ -287,7 +287,7 @@ func StreamResumeWithParameters(t *testing.T, handler events.MultipartHandler, p
 	})
 	require.NoError(t, err)
 
-	upload, err := handler.CreateUpload(ctx, sid)
+	upload, err := handler.CreateUpload(ctx, sid, false)
 	require.NoError(t, err)
 
 	stream, err := streamer.CreateAuditStreamForUpload(ctx, sid, *upload)
@@ -321,7 +321,7 @@ func StreamResumeWithParameters(t *testing.T, handler events.MultipartHandler, p
 	defer os.Remove(f.Name())
 	defer f.Close()
 
-	err = handler.Download(ctx, sid, f)
+	err = handler.Download(ctx, sid, "", f)
 	require.NoError(t, err)
 
 	_, err = f.Seek(0, 0)

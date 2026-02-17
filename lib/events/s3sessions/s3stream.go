@@ -43,7 +43,10 @@ import (
 )
 
 // CreateUpload creates a multipart upload
-func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID) (*events.StreamUpload, error) {
+func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
+	if intermediate {
+		return nil, trace.NotImplemented("")
+	}
 	start := time.Now()
 
 	input := &s3.CreateMultipartUploadInput{

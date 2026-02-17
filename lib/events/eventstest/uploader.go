@@ -123,7 +123,7 @@ func (m *MemoryUploader) Reset() {
 }
 
 // CreateUpload creates a multipart upload
-func (m *MemoryUploader) CreateUpload(ctx context.Context, sessionID session.ID) (*events.StreamUpload, error) {
+func (m *MemoryUploader) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 	upload := &events.StreamUpload{
@@ -356,7 +356,7 @@ func (m *MemoryUploader) UploadThumbnail(ctx context.Context, sessionID session.
 }
 
 // Download downloads session tarball and writes it to writer
-func (m *MemoryUploader) Download(ctx context.Context, sessionID session.ID, writer io.Writer) error {
+func (m *MemoryUploader) Download(ctx context.Context, sessionID session.ID, uploadID string, writer io.Writer) error {
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
 
@@ -440,7 +440,7 @@ func (m *MemoryUploader) UploadEncryptedRecording(ctx context.Context, sessionID
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	upload, err := m.CreateUpload(ctx, *sessID)
+	upload, err := m.CreateUpload(ctx, *sessID, false)
 	if err != nil {
 		return trace.Wrap(err, "creating upload")
 	}
@@ -506,7 +506,7 @@ type MockUploader struct {
 	MockCompleteUpload func(ctx context.Context, upload events.StreamUpload, parts []events.StreamPart) error
 }
 
-func (m *MockUploader) CreateUpload(ctx context.Context, sessionID session.ID) (*events.StreamUpload, error) {
+func (m *MockUploader) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
 	if m.CreateUploadError != nil {
 		return nil, m.CreateUploadError
 	}

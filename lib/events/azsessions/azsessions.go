@@ -381,7 +381,10 @@ func (h *Handler) uploadBlob(
 }
 
 // Download implements [events.UploadHandler] and downloads a session recording.
-func (h *Handler) Download(ctx context.Context, sessionID session.ID, writer io.Writer) error {
+func (h *Handler) Download(ctx context.Context, sessionID session.ID, uploadID string, writer io.Writer) error {
+	if uploadID != "" {
+		return trace.NotImplemented("")
+	}
 	return trace.Wrap(h.downloadBlob(ctx, sessionID, h.sessionBlob(sessionID), writer))
 }
 
@@ -434,7 +437,10 @@ func (h *Handler) downloadBlob(ctx context.Context, sessionID session.ID, blob *
 }
 
 // CreateUpload implements [events.MultipartUploader].
-func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID) (*events.StreamUpload, error) {
+func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
+	if intermediate {
+		return nil, trace.NotImplemented("az backend does not implement reuploads")
+	}
 	upload := events.StreamUpload{
 		ID:        uuid.NewString(),
 		SessionID: sessionID,

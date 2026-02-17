@@ -153,7 +153,7 @@ func (s *Service) CreateUpload(ctx context.Context, req *recordingencryptionv1.C
 		return nil, trace.Wrap(err)
 	}
 
-	upload, err := s.uploader.CreateUpload(ctx, *sessionID)
+	upload, err := s.uploader.CreateUpload(ctx, *sessionID, false)
 	if err != nil {
 		return nil, trace.Wrap(err, "creating encrypted recording upload")
 	}

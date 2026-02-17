@@ -75,7 +75,7 @@ func TestUploadCompleterCompletesAbandonedUploads(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	upload, err := mu.CreateUpload(context.Background(), sessionID)
+	upload, err := mu.CreateUpload(context.Background(), sessionID, false)
 	require.NoError(t, err)
 
 	err = uc.CheckUploads(context.Background())
@@ -125,7 +125,7 @@ func TestUploadCompleterNeedsSemaphore(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	upload, err := mu.CreateUpload(context.Background(), sessionID)
+	upload, err := mu.CreateUpload(context.Background(), sessionID, false)
 	require.NoError(t, err)
 
 	uc.PerformPeriodicCheck(context.Background())
@@ -163,7 +163,7 @@ func TestUploadCompleterAcquiresSemaphore(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	upload, err := mu.CreateUpload(context.Background(), sessionID)
+	upload, err := mu.CreateUpload(context.Background(), sessionID, false)
 	require.NoError(t, err)
 
 	uc.PerformPeriodicCheck(context.Background())
@@ -210,7 +210,7 @@ func TestUploadCompleterEmitsSessionEnd(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			upload, err := mu.CreateUpload(context.Background(), session.NewID())
+			upload, err := mu.CreateUpload(context.Background(), session.NewID(), false)
 			require.NoError(t, err)
 
 			// session end events are only emitted if there's at least one

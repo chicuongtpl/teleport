@@ -63,7 +63,7 @@ func UploadDownload(t *testing.T, handler events.MultipartHandler) {
 	defer os.Remove(f.Name())
 	defer f.Close()
 
-	err = handler.Download(ctx, id, f)
+	err = handler.Download(ctx, id, "", f)
 	require.NoError(t, err)
 
 	_, err = f.Seek(0, 0)
@@ -179,7 +179,7 @@ func DownloadNotFound(t *testing.T, handler events.MultipartHandler) {
 	defer os.Remove(f.Name())
 	defer f.Close()
 
-	err = handler.Download(t.Context(), id, f)
+	err = handler.Download(context.TODO(), id, "", f)
 	require.True(t, trace.IsNotFound(err))
 }
 

@@ -32,7 +32,7 @@ type UploadHandler interface {
 	// case of success.
 	Upload(ctx context.Context, sessionID session.ID, readCloser io.Reader) (string, error)
 	// Download downloads a session recording and writes it to a writer.
-	Download(ctx context.Context, sessionID session.ID, writer io.Writer) error
+	Download(ctx context.Context, sessionID session.ID, uploadID string, writer io.Writer) error
 	// UploadPendingSummary uploads a pending session summary and returns a URL
 	// with uploaded file in case of success. This function can be called
 	// multiple times for a given sessionID to update the state. A pending

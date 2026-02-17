@@ -71,8 +71,8 @@ func TestErrorCounter(t *testing.T) {
 			steps: []testStep{
 				{
 					action: func(pack *testPack) {
-						pack.errHandler.Download(ctx, "", nil)
-						pack.successHandler.Download(ctx, "", nil)
+						pack.errHandler.Download(ctx, "", "", nil)
+						pack.successHandler.Download(ctx, "", "", nil)
 					},
 					repeat: 10,
 				},
@@ -387,7 +387,7 @@ func (h *errorHandler) UploadThumbnail(ctx context.Context, sessionID session.ID
 	return "", h.err
 }
 
-func (h *errorHandler) Download(ctx context.Context, sessionID session.ID, writer io.Writer) error {
+func (h *errorHandler) Download(ctx context.Context, sessionID session.ID, uploadID string, writer io.Writer) error {
 	return h.err
 }
 

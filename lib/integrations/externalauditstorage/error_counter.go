@@ -408,8 +408,8 @@ func (c *ErrorCountingSessionHandler) UploadThumbnail(ctx context.Context, sessi
 }
 
 // Download calls [c.wrapped.Download] and counts the error or success.
-func (c *ErrorCountingSessionHandler) Download(ctx context.Context, sessionID session.ID, writer io.Writer) error {
-	err := c.wrapped.Download(ctx, sessionID, writer)
+func (c *ErrorCountingSessionHandler) Download(ctx context.Context, sessionID session.ID, uploadID string, writer io.Writer) error {
+	err := c.wrapped.Download(ctx, sessionID, uploadID, writer)
 	c.downloads.observe(err)
 	return err
 }
@@ -436,8 +436,8 @@ func (c *ErrorCountingSessionHandler) DownloadThumbnail(ctx context.Context, ses
 }
 
 // CreateUpload calls [c.wrapped.CreateUpload] and counts the error or success.
-func (c *ErrorCountingSessionHandler) CreateUpload(ctx context.Context, sessionID session.ID) (*events.StreamUpload, error) {
-	res, err := c.wrapped.CreateUpload(ctx, sessionID)
+func (c *ErrorCountingSessionHandler) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
+	res, err := c.wrapped.CreateUpload(ctx, sessionID, intermediate)
 	c.uploads.observe(err)
 	return res, err
 }

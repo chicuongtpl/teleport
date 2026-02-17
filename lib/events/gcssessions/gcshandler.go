@@ -331,7 +331,10 @@ func (h *Handler) uploadFile(ctx context.Context, path string, reader io.Reader,
 // Download downloads a session recording from a GCS bucket and writes the
 // result into a writer. Returns trace.NotFound error if the recording is not
 // found.
-func (h *Handler) Download(ctx context.Context, sessionID session.ID, writer io.Writer) error {
+func (h *Handler) Download(ctx context.Context, sessionID session.ID, uploadID string, writer io.Writer) error {
+	if uploadID != "" {
+		return trace.NotImplemented("")
+	}
 	return trace.Wrap(h.downloadFile(ctx, h.recordingPath(sessionID), writer))
 }
 

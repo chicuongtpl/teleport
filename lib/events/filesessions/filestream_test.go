@@ -42,7 +42,7 @@ func TestReserveUploadPart(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	upload, err := handler.CreateUpload(ctx, session.NewID())
+	upload, err := handler.CreateUpload(ctx, session.NewID(), false)
 	require.NoError(t, err)
 
 	err = handler.ReserveUploadPart(ctx, *upload, partNumber)
@@ -65,7 +65,7 @@ func TestUploadPart(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	upload, err := handler.CreateUpload(ctx, session.NewID())
+	upload, err := handler.CreateUpload(ctx, session.NewID(), false)
 	require.NoError(t, err)
 
 	err = handler.ReserveUploadPart(ctx, *upload, partNumber)
@@ -136,7 +136,7 @@ func TestCompleteUpload(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			upload, err := handler.CreateUpload(ctx, session.NewID())
+			upload, err := handler.CreateUpload(ctx, session.NewID(), false)
 			require.NoError(t, err)
 
 			// Create upload parts.
@@ -149,7 +149,9 @@ func TestCompleteUpload(t *testing.T) {
 			require.NoError(t, err)
 
 			// Check upload contents
-			uploadPath := handler.recordingPath(upload.SessionID)
+			uploadPath := handler.recordingPath(events.StreamUpload{
+				SessionID: upload.SessionID,
+			})
 			f, err := os.Open(uploadPath)
 			require.NoError(t, err)
 
@@ -174,7 +176,7 @@ func TestCleanupEmptyUpload(t *testing.T) {
 	sessionID := session.NewID()
 
 	// Create a completed upload.
-	upload, err := handler.CreateUpload(ctx, sessionID)
+	upload, err := handler.CreateUpload(ctx, sessionID, false)
 	require.NoError(t, err)
 
 	err = handler.ReserveUploadPart(ctx, *upload, 1)
@@ -188,14 +190,16 @@ func TestCleanupEmptyUpload(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create an empty upload with the same session ID and try to complete it.
-	emptyUpload, err := handler.CreateUpload(ctx, sessionID)
+	emptyUpload, err := handler.CreateUpload(ctx, sessionID, false)
 	require.NoError(t, err)
 
 	err = handler.CompleteUpload(ctx, *emptyUpload, []events.StreamPart{})
 	require.NoError(t, err)
 
 	// The empty upload should be cleaned up without impacting the original completed upload.
-	uploadPath := handler.recordingPath(upload.SessionID)
+	uploadPath := handler.recordingPath(events.StreamUpload{
+		SessionID: upload.SessionID,
+	})
 	f, err := os.Open(uploadPath)
 	require.NoError(t, err)
 

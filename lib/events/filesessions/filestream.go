@@ -118,14 +118,15 @@ func NewStreamer(cfg StreamerConfig) (*events.ProtoStreamer, error) {
 }
 
 // CreateUpload creates a multipart upload
-func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID) (*events.StreamUpload, error) {
+func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
 	if err := os.MkdirAll(h.uploadsPath(), teleport.PrivateDirMode); err != nil {
 		return nil, trace.ConvertSystemError(err)
 	}
 
 	upload := events.StreamUpload{
-		SessionID: sessionID,
-		ID:        uuid.New().String(),
+		SessionID:    sessionID,
+		ID:           uuid.New().String(),
+		Intermediate: intermediate,
 	}
 	if err := upload.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
@@ -175,7 +176,7 @@ func (h *Handler) CompleteUpload(ctx context.Context, upload events.StreamUpload
 		return h.cleanupUpload(ctx, upload)
 	}
 
-	uploadPath := h.recordingPath(upload.SessionID)
+	uploadPath := h.recordingPath(upload)
 
 	// Prevent other processes from accessing this file until the write is completed
 	f, err := GetOpenFileFunc()(uploadPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
@@ -249,7 +250,11 @@ Loop:
 		return trace.Wrap(err)
 	}
 
-	err = os.RemoveAll(h.uploadRootPath(upload))
+	deletePath := h.uploadRootPath(upload)
+	if upload.Intermediate {
+		deletePath = h.uploadPath(upload)
+	}
+	err = os.RemoveAll(deletePath)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "Failed to remove upload", "upload_id", upload.ID)
 	}
@@ -257,7 +262,7 @@ Loop:
 }
 
 func (h *Handler) cleanupUpload(ctx context.Context, upload events.StreamUpload) error {
-	uploadKey := h.recordingPath(upload.SessionID)
+	uploadKey := h.recordingPath(upload)
 	log := h.logger.With(
 		"upload", upload.ID,
 		"session", upload.SessionID,
