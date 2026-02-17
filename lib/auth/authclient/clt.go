@@ -1533,6 +1533,8 @@ type SSHLoginResponse struct {
 	// ClientOptions contains some options that the cluster wants the client to
 	// use.
 	ClientOptions ClientOptions `json:"client_options"`
+	// BrowserMFAWebauthnResponse is a webauthn response for the browser MFA flow
+	BrowserMFAWebauthnResponse *wantypes.CredentialAssertionResponse `json:"browser_mfa_webauthn_response,omitempty"`
 }
 
 // ClientOptions contains options passed from the control plane to the client at

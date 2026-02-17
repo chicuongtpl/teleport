@@ -39,6 +39,7 @@ import (
 	"github.com/gravitational/teleport/api/types/userloginstate"
 	"github.com/gravitational/teleport/lib/auth/authclient"
 	"github.com/gravitational/teleport/lib/auth/keystore"
+	wantypes "github.com/gravitational/teleport/lib/auth/webauthntypes"
 	"github.com/gravitational/teleport/lib/authz"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/inventory"
@@ -339,4 +340,8 @@ type MigrateWindowsCAParams = migrateWindowsCAParams
 
 func MigrateWindowsCA(ctx context.Context, params MigrateWindowsCAParams) error {
 	return migrateWindowsCA(ctx, params)
+}
+
+func EncryptBrowserMFAResponse(redirectURL *url.URL, webauthnResponse *wantypes.CredentialAssertionResponse) (string, error) {
+	return encryptBrowserMFAResponse(redirectURL, webauthnResponse)
 }
