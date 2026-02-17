@@ -2216,6 +2216,26 @@ func (s *session) getParties() (parties []*party) {
 	return parties
 }
 
+// Stderr returns an io.Writer that writes to each party's SSH stderr channel.
+func (s *session) Stderr() io.Writer {
+	return &sessionStderrWriter{session: s}
+}
+
+type sessionStderrWriter struct {
+	session *session
+}
+
+func (w *sessionStderrWriter) Write(p []byte) (n int, err error) {
+	// Stderr is low-volume and failure path oriented, so this uses simple,
+	// best-effort fanout instead of TermManager style buffering/failover.
+	for _, party := range w.session.getParties() {
+		if _, writeErr := party.ch.Stderr().Write(p); writeErr != nil {
+			w.session.logger.WarnContext(w.session.serverCtx, "Failed writing to stderr of SSH channel", "error", writeErr)
+		}
+	}
+	return len(p), nil
+}
+
 type party struct {
 	sync.Mutex
 

@@ -39,6 +39,7 @@ import (
 	"github.com/gravitational/teleport"
 	tracessh "github.com/gravitational/teleport/api/observability/tracing/ssh"
 	rsession "github.com/gravitational/teleport/lib/session"
+	"github.com/gravitational/teleport/lib/sshutils/reexec"
 )
 
 // LookupUser is used to mock the value returned by user.Lookup(string).
@@ -195,6 +196,11 @@ func (t *terminal) Run(ctx context.Context) error {
 	default:
 	}
 
+	sess := t.serverContext.getSession()
+	if sess == nil {
+		return trace.BadParameter("missing interactive session")
+	}
+
 	var err error
 	// Create the command that will actually execute.
 	t.cmd, err = ConfigureCommand(t.serverContext)
@@ -213,6 +219,29 @@ func (t *terminal) Run(ctx context.Context) error {
 	t.cmd.ExtraFiles = append(t.cmd.ExtraFiles, nil)
 	// Pass the TTY to the child since a terminal is attached.
 	t.cmd.ExtraFiles = append(t.cmd.ExtraFiles, tty)
+
+	// Capture stderr.
+	stderrr, stderrw, err := os.Pipe()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer stderrw.Close()
+	t.cmd.Stderr = stderrw
+
+	go func() {
+		defer stderrr.Close()
+
+		childErr, err := reexec.ReadChildError(stderrr)
+		if err != nil {
+			t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
+		} else if childErr != nil {
+			// Since are writing straight to stderr rather than the PTY, ensure we add a CRLF.
+			errMsg := childErr.Error() + "\r\n"
+			if _, err := io.WriteString(sess.Stderr(), errMsg); err != nil {
+				t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
+			}
+		}
+	}()
 
 	// Close the TTY before returning to ensure that our half of the pipe is
 	// closed. This ensures that reading from the PTY will unblock when the
@@ -552,15 +581,18 @@ func (b *ptyBuffer) Write(p []byte) (n int, err error) {
 }
 
 func (t *remoteTerminal) Run(ctx context.Context) error {
+	sess := t.ctx.getSession()
+	if sess == nil {
+		return trace.BadParameter("missing interactive session")
+	}
+
 	// prepare the remote session by setting environment variables
 	t.prepareRemoteSession(ctx, t.session, t.ctx)
 
-	// combine stdout and stderr
 	stdout, err := t.session.StdoutPipe()
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	t.session.Stderr = t.session.Stdout
 	stdin, err := t.session.StdinPipe()
 	if err != nil {
 		return trace.Wrap(err)
@@ -571,6 +603,9 @@ func (t *remoteTerminal) Run(ctx context.Context) error {
 		r: stdout,
 		w: stdin,
 	}
+
+	// Propagate stderr to the session parties.
+	t.session.Stderr = sess.Stderr()
 
 	// if a specific term type was not requested, then pick the default one and request a pty
 	if t.termType == "" {
