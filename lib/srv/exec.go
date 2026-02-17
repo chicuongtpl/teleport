@@ -41,6 +41,7 @@ import (
 	tracessh "github.com/gravitational/teleport/api/observability/tracing/ssh"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/events"
+	"github.com/gravitational/teleport/lib/sshutils/reexec"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
@@ -187,6 +188,28 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	// Capture stderr.
+	stderrr, stderrw, err := os.Pipe()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	defer stderrw.Close()
+	e.Cmd.Stderr = stderrw
+
+	go func() {
+		defer stderrr.Close()
+
+		childErr, err := reexec.ReadChildError(stderrr)
+		if err != nil {
+			logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
+		} else if childErr != nil {
+			errMsg := childErr.Error() + "\n"
+			if _, err := io.WriteString(channel.Stderr(), errMsg); err != nil {
+				logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
+			}
+		}
+	}()
 
 	// Start the command.
 	err = e.Cmd.Start()

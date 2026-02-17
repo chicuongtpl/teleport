@@ -104,6 +104,7 @@ func TestTerminal_KillUnderlyingShell(t *testing.T) {
 	// Mark the terminal allocation to make sh wait indefinitely.
 	// Without it, sh quits immediately as stdin is not set.
 	scx.termAllocated = true
+	scx.session = &session{}
 
 	ctx := context.Background()
 
