@@ -147,8 +147,7 @@ func (s *sftpSubsys) Start(ctx context.Context,
 		if err != nil {
 			s.serverCtx.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
 		} else if childErr != nil {
-			// Since are writing straight to stderr rather than the PTY, ensure we add a CRLF.
-			errMsg := childErr.Error() + "\r\n"
+			errMsg := childErr.Error() + "\n"
 			if _, err := io.WriteString(ch.Stderr(), errMsg); err != nil {
 				s.serverCtx.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
 			}

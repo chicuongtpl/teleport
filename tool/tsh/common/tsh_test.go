@@ -8379,6 +8379,8 @@ func TestSSHStderrPropagation(t *testing.T) {
 		t.Parallel()
 		homePath := userMissingLoginHomePath
 
+		unkownUserReexecError := fmt.Sprintf("Failed to launch: %v.\n", user.UnknownUserError(missingLogin))
+
 		for _, tc := range []testCase{sshShell, sshCommand, sshCommandTTY, sshShellAgentX11} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
@@ -8389,7 +8391,6 @@ func TestSSHStderrPropagation(t *testing.T) {
 				require.ErrorAs(t, err, &exitCodeErr)
 				require.Equal(t, teleport.RemoteCommandFailure, exitCodeErr.Code)
 
-				unkownUserReexecError := fmt.Sprintf("Failed to launch: %v.\n", user.UnknownUserError(missingLogin))
 				var expectStderr string
 				if tc.x11Forward {
 					expectStderr += fmt.Sprintf("X11 forwarding request failed: %v", unkownUserReexecError)
@@ -8405,11 +8406,40 @@ func TestSSHStderrPropagation(t *testing.T) {
 				require.Equal(t, expectStderr, stderr)
 			})
 		}
+
+		t.Run("sftp", func(t *testing.T) {
+			stderr := &output{buf: bytes.Buffer{}}
+			err := Run(ctx, []string{
+				"scp",
+				"--insecure",
+				"-q",
+				"-d",
+				"--no-resume",
+				fmt.Sprintf("%s@%s:%s", missingLogin, sshHostname, "/placeholder"),
+				t.TempDir(),
+			},
+				setHomePath(homePath),
+				func(conf *CLIConf) error {
+					conf.overrideStderr = stderr
+					conf.Relogin = false
+					return nil
+				},
+			)
+			require.Error(t, err)
+			expectStderr := unkownUserReexecError
+			require.ErrorContains(t, err, expectStderr)
+		})
 	})
 
 	t.Run("error with host user creation context", func(t *testing.T) {
 		t.Parallel()
 		homePath := userHostUserCreationContextHomePath
+
+		contextualReexecErrorMessage := fmt.Sprintf("Failed to launch: %s: host user creation denied by the following resources: [%s: %q]\n",
+			user.UnknownUserError(missingLogin),
+			types.KindRole,
+			roleNodeAccessMissingLogin.GetName(),
+		)
 
 		for _, tc := range []testCase{sshCommand, sshShellAgentX11} {
 			t.Run(tc.name, func(t *testing.T) {
@@ -8420,12 +8450,6 @@ func TestSSHStderrPropagation(t *testing.T) {
 				var exitCodeErr *common.ExitCodeError
 				require.ErrorAs(t, err, &exitCodeErr)
 				require.Equal(t, teleport.RemoteCommandFailure, exitCodeErr.Code)
-
-				contextualReexecErrorMessage := fmt.Sprintf("Failed to launch: %s: host user creation denied by the following resources: [%s: %q]\n",
-					user.UnknownUserError(missingLogin),
-					types.KindRole,
-					roleNodeAccessMissingLogin.GetName(),
-				)
 
 				var expectStderr string
 				if tc.x11Forward {
@@ -8442,6 +8466,29 @@ func TestSSHStderrPropagation(t *testing.T) {
 				require.Equal(t, expectStderr, stderr)
 			})
 		}
+
+		t.Run("sftp", func(t *testing.T) {
+			stderr := &output{buf: bytes.Buffer{}}
+			err := Run(ctx, []string{
+				"scp",
+				"--insecure",
+				"-q",
+				"-d",
+				"--no-resume",
+				fmt.Sprintf("%s@%s:%s", missingLogin, sshHostname, "/placeholder"),
+				t.TempDir(),
+			},
+				setHomePath(homePath),
+				func(conf *CLIConf) error {
+					conf.overrideStderr = stderr
+					conf.Relogin = false
+					return nil
+				},
+			)
+			require.Error(t, err)
+			expectStderr := contextualReexecErrorMessage
+			require.ErrorContains(t, err, expectStderr)
+		})
 	})
 
 	t.Run("forwarding not permitted", func(t *testing.T) {
