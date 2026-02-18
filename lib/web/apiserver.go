@@ -3052,6 +3052,7 @@ func (h *Handler) getResetPasswordToken(ctx context.Context, tokenID string) (an
 //
 // {"user": "alex", "pass": "abcdef123456"}
 // {"passwordless": true}
+// {"user": "alex", "pass": "abcdef123456", "BrowserMFATSHRedirectURL": "http://localhost:12345/callback?secret_key=X"}
 //
 // Successful response:
 //
@@ -3084,8 +3085,8 @@ func (h *Handler) mfaLoginBegin(w http.ResponseWriter, r *http.Request, p httpro
 			Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
 		}
 
-		if req.BrowserMFAClientRedirectURL != "" {
-			mfaReq.BrowserMFAClientRedirectURL = req.BrowserMFAClientRedirectURL
+		if req.BrowserMFATSHRedirectURL != "" {
+			mfaReq.BrowserMFATSHRedirectURL = req.BrowserMFATSHRedirectURL
 		}
 	}
 
