@@ -21,6 +21,7 @@ package srv
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
@@ -39,10 +40,12 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/gravitational/teleport"
 	decisionpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/decision/v1alpha1"
+	tracessh "github.com/gravitational/teleport/api/observability/tracing/ssh"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/sshagent"
 	"github.com/gravitational/teleport/lib/sshutils/networking"
@@ -56,6 +59,11 @@ type stubUser struct {
 	uid      string
 	groupIDS []string
 }
+
+const (
+	reexecExecWaitHelperEnv      = "TELEPORT_REEXEC_EXEC_WAIT_HELPER_PROCESS"
+	reexecExecWaitHelperErrorEnv = "TELEPORT_REEXEC_EXEC_WAIT_HELPER_ERROR"
+)
 
 func (s *stubUser) GID() string {
 	return s.gid
@@ -204,6 +212,157 @@ func newHTTPTestServer(t *testing.T, listener net.Listener) *httptest.Server {
 	tsrv.Start()
 	t.Cleanup(tsrv.Close)
 	return tsrv
+}
+
+func TestRemoteExecWait(t *testing.T) {
+	tests := []struct {
+		name       string
+		exitStatus uint32
+		wantCode   int
+	}{
+		{
+			name:       "successful remote command",
+			exitStatus: 0,
+			wantCode:   teleport.RemoteCommandSuccess,
+		},
+		{
+			name:       "failed remote command",
+			exitStatus: 17,
+			wantCode:   17,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scx := newExecServerContext(t, newMockServer(t))
+			sshSession := newRemoteExecTestSession(t, tt.exitStatus)
+
+			execReq := &remoteExec{
+				command: "echo hello",
+				session: sshSession,
+				ctx:     scx,
+			}
+			ch := newMockSSHChannel()
+			t.Cleanup(func() {
+				require.NoError(t, ch.Close())
+			})
+
+			result, err := execReq.Start(t.Context(), ch)
+			require.NoError(t, err)
+			require.Nil(t, result)
+
+			execResult := execReq.Wait()
+			require.Equal(t, "echo hello", execResult.Command)
+			require.Equal(t, tt.wantCode, execResult.Code)
+		})
+	}
+}
+
+func newRemoteExecTestSession(t *testing.T, exitStatus uint32) *tracessh.Session {
+	t.Helper()
+
+	_, key, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	signer, err := ssh.NewSignerFromKey(key)
+	require.NoError(t, err)
+
+	cfg := &ssh.ServerConfig{NoClientAuth: true}
+	cfg.AddHostKey(signer)
+
+	listener, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		_, chCh, reqCh, err := ssh.NewServerConn(conn, cfg)
+		if err != nil {
+			return
+		}
+		go ssh.DiscardRequests(reqCh)
+
+		for newChannel := range chCh {
+			channel, requests, err := newChannel.Accept()
+			if err != nil {
+				continue
+			}
+
+			go func() {
+				defer channel.Close()
+
+				for req := range requests {
+					if req.Type == "exec" {
+						req.Reply(true, nil)
+						_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct {
+							Status uint32
+						}{Status: exitStatus}))
+						return
+					}
+
+					req.Reply(true, nil)
+				}
+			}()
+		}
+	}()
+
+	client, err := tracessh.Dial(t.Context(), listener.Addr().Network(), listener.Addr().String(), &ssh.ClientConfig{
+		User:            "user",
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: ssh.FixedHostKey(signer.PublicKey()),
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	sess, err := client.NewSession(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sess.Close() })
+
+	return sess
+}
+
+func TestLocalExecWait(t *testing.T) {
+	expectedChildErr := "Failed to launch: test exec child error"
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestReexecHelperProcess$")
+	cmd.Env = append(
+		os.Environ(),
+		reexecExecWaitHelperEnv+"=1",
+		reexecExecWaitHelperErrorEnv+"="+expectedChildErr,
+	)
+
+	stderrr, stderrw, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, stderrr.Close())
+	})
+
+	cmd.Stderr = stderrw
+	require.NoError(t, cmd.Start())
+	require.NoError(t, stderrw.Close())
+
+	scx := newExecServerContext(t, newMockServer(t))
+	execReq := &localExec{
+		Command:   "echo hello",
+		Ctx:       scx,
+		Cmd:       cmd,
+		cmdStderr: stderrr,
+	}
+
+	result := execReq.Wait()
+	require.Equal(t, 1, result.Code)
+	require.EqualError(t, result.Error, expectedChildErr)
+}
+
+func TestReexecHelperProcess(t *testing.T) {
+	if os.Getenv(reexecExecWaitHelperEnv) == "1" {
+		_, _ = io.WriteString(os.Stderr, os.Getenv(reexecExecWaitHelperErrorEnv))
+		os.Exit(1)
+	}
 }
 
 func TestNetworkingCommand(t *testing.T) {
