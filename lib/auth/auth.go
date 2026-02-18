@@ -4401,6 +4401,28 @@ func (a *Server) CreateAuthenticateChallenge(ctx context.Context, req *proto.Cre
 		return nil
 	}
 
+	// If a BrowserMFARequestID is provided, look up the request and apply its challenge extensions.
+	if req.BrowserMFARequestID != "" {
+		browserMFAReq, err := a.GetSSOMFASession(ctx, req.BrowserMFARequestID)
+		if err != nil {
+			a.logger.ErrorContext(ctx, "failed to get browser MFA request", "error", err)
+			return nil, trace.AccessDenied("invalid browser MFA request")
+		}
+
+		if browserMFAReq.ChallengeExtensions != nil {
+			chalExts := browserMFAReq.ChallengeExtensions
+			if chalExts.Scope != mfav1.ChallengeScope_CHALLENGE_SCOPE_UNSPECIFIED {
+				challengeExtensions.Scope = chalExts.Scope
+			}
+			if chalExts.AllowReuse != mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_UNSPECIFIED {
+				challengeExtensions.AllowReuse = chalExts.AllowReuse
+			}
+			if chalExts.UserVerificationRequirement != "" {
+				challengeExtensions.UserVerificationRequirement = chalExts.UserVerificationRequirement
+			}
+		}
+	}
+
 	switch req.GetRequest().(type) {
 	case *proto.CreateAuthenticateChallengeRequest_UserCredentials:
 		username = req.GetUserCredentials().GetUsername()
