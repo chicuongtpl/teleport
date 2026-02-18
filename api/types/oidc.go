@@ -509,6 +509,10 @@ func (o *OIDCConnectorV3) CheckAndSetDefaults() error {
 // itself is being created or updated, not when a OIDCConnector
 // object is being created or updated.
 func (o *OIDCConnectorV3) Validate() error {
+	if len(o.GetName()) > constants.MaxAuthConnectorNameLength {
+		return trace.BadParameter("connector name %q is too long", o.GetName())
+	}
+
 	if o.Spec.ClientRedirectSettings != nil {
 		for _, cidrStr := range o.Spec.ClientRedirectSettings.InsecureAllowedCidrRanges {
 			_, err := netip.ParsePrefix(cidrStr)

@@ -19,6 +19,7 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509/pkix"
 	"strings"
@@ -96,13 +97,20 @@ func TestValidateRoles(t *testing.T) {
 	}
 
 	testCases := []struct {
-		desc        string
-		roles       []string
-		expectedErr error
+		desc          string
+		connectorName string
+		roles         []string
+		expectedErr   error
 	}{
 		{
 			desc:  "valid roles",
 			roles: []string{"foo", "bar"},
+		},
+		{
+			desc:          "name too long",
+			connectorName: strings.Repeat("abc", 300),
+			roles:         []string{"foo", "bar"},
+			expectedErr:   trace.BadParameter("connector name %q is too long", strings.Repeat("abc", 300)),
 		},
 		{
 			desc:  "role templates",
@@ -117,15 +125,18 @@ func TestValidateRoles(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			connector, err := types.NewSAMLConnector("test_connector", types.SAMLConnectorSpecV2{
-				AssertionConsumerService: "http://localhost:65535/acs", // not called
-				Issuer:                   "test",
-				SSO:                      "https://localhost:65535/sso", // not called
-				AttributesToRoles: []types.AttributeMapping{
-					// not used. can be any name, value but role must exist
-					{Name: "groups", Value: "admin", Roles: tc.roles},
+			connector, err := types.NewSAMLConnector(
+				cmp.Or(tc.connectorName, "test_connector"),
+				types.SAMLConnectorSpecV2{
+					AssertionConsumerService: "http://localhost:65535/acs", // not called
+					Issuer:                   "test",
+					SSO:                      "https://localhost:65535/sso", // not called
+					AttributesToRoles: []types.AttributeMapping{
+						// not used. can be any name, value but role must exist
+						{Name: "groups", Value: "admin", Roles: tc.roles},
+					},
 				},
-			})
+			)
 			require.NoError(t, err)
 
 			err = ValidateSAMLConnector(connector, validRoles)

@@ -37,6 +37,7 @@ import (
 	dsig "github.com/russellhaering/goxmldsig"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/tlsca"
@@ -59,6 +60,10 @@ func ValidateSAMLConnector(sc types.SAMLConnector, rg RoleGetter, opts ...types.
 
 	if err := CheckAndSetDefaults(sc); err != nil {
 		return trace.Wrap(err)
+	}
+
+	if len(sc.GetName()) > constants.MaxAuthConnectorNameLength {
+		return trace.BadParameter("connector name %q is too long", sc.GetName())
 	}
 
 	getEntityDescriptorFromURL := func(url string) (string, error) {
