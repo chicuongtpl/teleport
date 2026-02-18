@@ -931,7 +931,7 @@ func (x *SSOChallenge) GetRedirectUrl() string {
 // BrowserMFAChallenge contains browser challenge details.
 type BrowserMFAChallenge struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// client_redirect_url is the browser URL that the user will be sent to MFA
+	// client_redirect_url is the browser URL that the user will be sent to MFA.
 	ClientRedirectUrl string `protobuf:"bytes,1,opt,name=client_redirect_url,json=clientRedirectUrl,proto3" json:"client_redirect_url,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache

@@ -206,7 +206,7 @@ message SSOChallenge {
 
 // BrowserMFAChallenge contains browser challenge details.
 message BrowserMFAChallenge {
-  // client_redirect_url is the browser URL that the user will be sent to MFA
+  // client_redirect_url is the browser URL that the user will be sent to MFA.
   string client_redirect_url = 1;
 }
 

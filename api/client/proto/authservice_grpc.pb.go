@@ -1074,7 +1074,12 @@ type AuthServiceClient interface {
 	// by the proxy on behalf of a cluster that wishes to join to this one as a
 	// leaf cluster.
 	ValidateTrustedCluster(ctx context.Context, in *ValidateTrustedClusterRequest, opts ...grpc.CallOption) (*ValidateTrustedClusterResponse, error)
-	// ValidateBrowserMFAChallenge validates browser MFA challenge responses
+	// ValidateBrowserMFAChallenge validates browser MFA challenge responses.
+	// This is called when a user has been sent to the browser to solve an MFA challenge
+	// that was triggered by tsh or tctl. When the user solves the MFA challenge, the
+	// response is sent to this RPC. ValidateBrowserMFAChallenge will validate the MFA
+	// response, encrypt it, append it to tsh/tctl's callback URL and return it to the browser.
+	// More info: https://github.com/gravitational/teleport/blob/master/rfd/0233-tsh-browser-mfa.md
 	ValidateBrowserMFAChallenge(ctx context.Context, in *ValidateBrowserMFAChallengeRequest, opts ...grpc.CallOption) (*ValidateBrowserMFAChallengeResponse, error)
 }
 
@@ -4768,7 +4773,12 @@ type AuthServiceServer interface {
 	// by the proxy on behalf of a cluster that wishes to join to this one as a
 	// leaf cluster.
 	ValidateTrustedCluster(context.Context, *ValidateTrustedClusterRequest) (*ValidateTrustedClusterResponse, error)
-	// ValidateBrowserMFAChallenge validates browser MFA challenge responses
+	// ValidateBrowserMFAChallenge validates browser MFA challenge responses.
+	// This is called when a user has been sent to the browser to solve an MFA challenge
+	// that was triggered by tsh or tctl. When the user solves the MFA challenge, the
+	// response is sent to this RPC. ValidateBrowserMFAChallenge will validate the MFA
+	// response, encrypt it, append it to tsh/tctl's callback URL and return it to the browser.
+	// More info: https://github.com/gravitational/teleport/blob/master/rfd/0233-tsh-browser-mfa.md
 	ValidateBrowserMFAChallenge(context.Context, *ValidateBrowserMFAChallengeRequest) (*ValidateBrowserMFAChallengeResponse, error)
 }
 

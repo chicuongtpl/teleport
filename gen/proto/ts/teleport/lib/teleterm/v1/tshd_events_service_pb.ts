@@ -328,7 +328,7 @@ export interface SSOChallenge {
  */
 export interface BrowserMFAChallenge {
     /**
-     * client_redirect_url is the browser URL that the user will be sent to MFA
+     * client_redirect_url is the browser URL that the user will be sent to MFA.
      *
      * @generated from protobuf field: string client_redirect_url = 1;
      */
