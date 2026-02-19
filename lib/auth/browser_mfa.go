@@ -18,52 +18,19 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"net/url"
 
 	"github.com/gravitational/trace"
 
 	mfav1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/mfa/v1"
-	"github.com/gravitational/teleport/lib/auth/authclient"
+	webauthnpb "github.com/gravitational/teleport/api/types/webauthn"
+	"github.com/gravitational/teleport/lib/auth/internal"
 	wanlib "github.com/gravitational/teleport/lib/auth/webauthn"
 	wantypes "github.com/gravitational/teleport/lib/auth/webauthntypes"
-	"github.com/gravitational/teleport/lib/secret"
 )
 
-// EncryptBrowserMFAResponse encrypts a browser MFA webauthn response and returns the redirect URL with the encrypted response
-func encryptBrowserMFAResponse(redirectURL *url.URL, webauthnResponse *wantypes.CredentialAssertionResponse) (string, error) {
-	consoleResponse := authclient.SSHLoginResponse{
-		BrowserMFAWebauthnResponse: webauthnResponse,
-	}
-	out, err := json.Marshal(consoleResponse)
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-
-	// Extract secret out of the redirect URL
-	secretKey := redirectURL.Query().Get("secret_key")
-	if secretKey == "" {
-		return "", trace.BadParameter("missing secret_key")
-	}
-
-	// AES-GCM based symmetric cipher
-	key, err := secret.ParseKey([]byte(secretKey))
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	ciphertext, err := key.Seal(out)
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-
-	// Place ciphertext into the redirect URL
-	redirectURL.RawQuery = url.Values{"response": {string(ciphertext)}}.Encode()
-
-	return redirectURL.String(), nil
-}
-
-// ValidateBrowserMFAChallenge validates an MFA challenge response and returns the redirect URL with encrypted response
-func (a *Server) ValidateBrowserMFAChallenge(ctx context.Context, requestID string, webauthnResponse *wantypes.CredentialAssertionResponse) (string, error) {
+// ValidateBrowserMFAChallenge validates an MFA challenge response and returns the redirect URL with encrypted response.
+func (a *Server) ValidateBrowserMFAChallenge(ctx context.Context, requestID string, webauthnResponse *webauthnpb.CredentialAssertionResponse) (string, error) {
 	// Retrieve the MFA session
 	mfaSession, err := a.GetSSOMFASession(ctx, requestID)
 	if err != nil {
@@ -77,7 +44,7 @@ func (a *Server) ValidateBrowserMFAChallenge(ctx context.Context, requestID stri
 	}
 
 	webConfig, err := pref.GetWebauthn()
-	if err != nil && !trace.IsNotFound(err) {
+	if err != nil {
 		return "", trace.Wrap(err)
 	}
 
@@ -87,11 +54,16 @@ func (a *Server) ValidateBrowserMFAChallenge(ctx context.Context, requestID stri
 		Identity: a.Services,
 	}
 
-	if err := webLogin.ValidateMFAResponse(ctx, mfaSession.Username, webauthnResponse, &mfav1.ChallengeExtensions{
-		Scope:                       mfaSession.ChallengeExtensions.Scope,
-		AllowReuse:                  mfaSession.ChallengeExtensions.AllowReuse,
-		UserVerificationRequirement: mfaSession.ChallengeExtensions.UserVerificationRequirement,
-	}); err != nil {
+	wr := wantypes.CredentialAssertionResponseFromProto(webauthnResponse)
+	if err := webLogin.Validate(ctx,
+		mfaSession.Username,
+		wr,
+		&mfav1.ChallengeExtensions{
+			Scope:                       mfaSession.ChallengeExtensions.Scope,
+			AllowReuse:                  mfaSession.ChallengeExtensions.AllowReuse,
+			UserVerificationRequirement: mfaSession.ChallengeExtensions.UserVerificationRequirement,
+		},
+	); err != nil {
 		return "", trace.Wrap(err, "failed to validate browser MFA response")
 	}
 
@@ -101,7 +73,7 @@ func (a *Server) ValidateBrowserMFAChallenge(ctx context.Context, requestID stri
 		return "", trace.Wrap(err)
 	}
 
-	clientRedirectURL, err := encryptBrowserMFAResponse(u, webauthnResponse)
+	clientRedirectURL, err := internal.EncryptBrowserMFAResponse(u, wr)
 	if err != nil {
 		return "", trace.Wrap(err)
 	}

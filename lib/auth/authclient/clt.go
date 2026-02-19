@@ -1534,6 +1534,8 @@ type SSHLoginResponse struct {
 	// use.
 	ClientOptions ClientOptions `json:"client_options"`
 	// BrowserMFAWebauthnResponse is a webauthn response for the browser MFA flow
+	// Exists in SSHLoginResponse as this is the payload used by the SSO redirector
+	// (lib/client/sso/redirector.go).
 	BrowserMFAWebauthnResponse *wantypes.CredentialAssertionResponse `json:"browser_mfa_webauthn_response,omitempty"`
 }
 
