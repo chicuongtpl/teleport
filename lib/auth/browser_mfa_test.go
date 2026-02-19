@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/gravitational/trace"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gravitational/teleport/api/client/proto"
@@ -38,11 +39,11 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 		Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, as.Close()) })
+	t.Cleanup(func() { assert.NoError(t, as.Close()) })
 
 	srv, err := as.NewTestTLSServer()
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, srv.Close()) })
+	t.Cleanup(func() { assert.NoError(t, srv.Close()) })
 
 	a := srv.Auth()
 

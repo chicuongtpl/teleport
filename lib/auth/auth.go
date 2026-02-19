@@ -4405,22 +4405,19 @@ func (a *Server) CreateAuthenticateChallenge(ctx context.Context, req *proto.Cre
 	if req.BrowserMFARequestID != "" {
 		browserMFAReq, err := a.GetSSOMFASession(ctx, req.BrowserMFARequestID)
 		if err != nil {
-			a.logger.ErrorContext(ctx, "failed to get browser MFA request", "error", err)
+			a.logger.ErrorContext(ctx, "Failed to get browser MFA request", "error", err)
 			return nil, trace.AccessDenied("invalid browser MFA request")
 		}
 
-		if browserMFAReq.ChallengeExtensions != nil {
-			chalExts := browserMFAReq.ChallengeExtensions
-			if chalExts.Scope != mfav1.ChallengeScope_CHALLENGE_SCOPE_UNSPECIFIED {
-				challengeExtensions.Scope = chalExts.Scope
-			}
-			if chalExts.AllowReuse != mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_UNSPECIFIED {
-				challengeExtensions.AllowReuse = chalExts.AllowReuse
-			}
-			if chalExts.UserVerificationRequirement != "" {
-				challengeExtensions.UserVerificationRequirement = chalExts.UserVerificationRequirement
-			}
+		chalExts := browserMFAReq.ChallengeExtensions
+		if chalExts == nil {
+			a.logger.ErrorContext(ctx, "Failed to get challenge extensions from browser MFA request", "request_id", req.BrowserMFARequestID)
+			return nil, trace.BadParameter("no challenge extensions present")
 		}
+
+		challengeExtensions.Scope = chalExts.Scope
+		challengeExtensions.AllowReuse = chalExts.AllowReuse
+		challengeExtensions.UserVerificationRequirement = chalExts.UserVerificationRequirement
 	}
 
 	switch req.GetRequest().(type) {
