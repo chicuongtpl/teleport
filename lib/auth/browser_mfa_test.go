@@ -31,9 +31,9 @@ import (
 	"github.com/gravitational/teleport/api/constants"
 	mfav1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/mfa/v1"
 	"github.com/gravitational/teleport/api/types"
-	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/auth/authclient"
 	"github.com/gravitational/teleport/lib/auth/authtest"
+	"github.com/gravitational/teleport/lib/auth/internal"
 	"github.com/gravitational/teleport/lib/auth/mfatypes"
 	"github.com/gravitational/teleport/lib/auth/mocku2f"
 	wanlib "github.com/gravitational/teleport/lib/auth/webauthn"
@@ -147,7 +147,7 @@ func TestEncryptBrowserMFAResponse(t *testing.T) {
 				return
 			}
 
-			result, err := auth.EncryptBrowserMFAResponse(redirectURL, tt.webauthnResponse)
+			result, err := internal.EncryptBrowserMFAResponse(redirectURL, tt.webauthnResponse)
 			tt.assertError(t, err)
 			if err == nil {
 				tt.assertRedirectURL(t, result)
@@ -310,7 +310,11 @@ func TestValidateBrowserMFAChallengeErrors(t *testing.T) {
 	for _, tt := range errorTests {
 		t.Run(tt.name, func(t *testing.T) {
 			requestID := tt.setupSession(t)
-			_, err := a.ValidateBrowserMFAChallenge(ctx, requestID, tt.webauthnResponse)
+			_, err := a.ValidateBrowserMFAChallenge(
+				ctx,
+				requestID,
+				wantypes.CredentialAssertionResponseToProto(tt.webauthnResponse),
+			)
 			tt.assertError(t, err)
 		})
 	}
@@ -385,7 +389,11 @@ func TestValidateBrowserMFAChallengeErrors(t *testing.T) {
 		require.NoError(t, err)
 
 		// Call ValidateBrowserMFAChallenge with the valid response
-		result, err := a.ValidateBrowserMFAChallenge(ctx, validRequestID, assertionResp)
+		result, err := a.ValidateBrowserMFAChallenge(
+			ctx,
+			validRequestID,
+			wantypes.CredentialAssertionResponseToProto(assertionResp),
+		)
 		require.NoError(t, err)
 		require.NotEmpty(t, result)
 
