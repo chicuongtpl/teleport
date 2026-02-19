@@ -49,7 +49,7 @@ func EncryptBrowserMFAResponse(redirectURL *url.URL, webauthnResponse *wantypes.
 	}
 	out, err := json.Marshal(consoleResponse)
 	if err != nil {
-		return "", trace.Wrap(err, "marshalling response payload")
+		return "", trace.Wrap(err, "marshaling response payload")
 	}
 
 	// Base64 and encrypt the response payload.
