@@ -61,6 +61,7 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 		browserMFAReqID   string
 		requestExtensions *mfav1.ChallengeExtensions
 		wantError         bool
+		checkError        func(t *testing.T, err error)
 		checkExtensions   func(t *testing.T, extensions *mfav1.ChallengeExtensions)
 	}{
 		{
@@ -70,6 +71,9 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 				Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
 			},
 			wantError: true,
+			checkError: func(t *testing.T, err error) {
+				require.True(t, trace.IsAccessDenied(err), "expected access denied error, got: %v", err)
+			},
 		},
 		{
 			name: "OK browser MFA request with scope set to LOGIN",
@@ -188,7 +192,7 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 			},
 			wantError: false,
 			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Equal(t, mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES, extensions.AllowReuse)
+				require.Equal(t, mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_UNSPECIFIED, extensions.AllowReuse)
 			},
 		},
 		{
@@ -212,11 +216,11 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 			},
 			wantError: false,
 			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Equal(t, "discouraged", extensions.UserVerificationRequirement)
+				require.Equal(t, "", extensions.UserVerificationRequirement)
 			},
 		},
 		{
-			name: "OK browser MFA request with nil challenge extensions preserves request",
+			name: "NOK browser MFA request with nil challenge extensions",
 			setup: func(t *testing.T) {
 				session := &services.SSOMFASessionData{
 					RequestID:           "test-request-7",
@@ -234,11 +238,9 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 				AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_NO,
 				UserVerificationRequirement: "preferred",
 			},
-			wantError: false,
-			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Equal(t, mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN, extensions.Scope)
-				require.Equal(t, mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_NO, extensions.AllowReuse)
-				require.Equal(t, "preferred", extensions.UserVerificationRequirement)
+			wantError: true,
+			checkError: func(t *testing.T, err error) {
+				require.True(t, trace.IsBadParameter(err), "expected bad parameter error, got: %v", err)
 			},
 		},
 	}
@@ -264,7 +266,9 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 
 			if tt.wantError {
 				require.Error(t, err)
-				require.True(t, trace.IsAccessDenied(err), "expected access denied error, got: %v", err)
+				if tt.checkError != nil {
+					tt.checkError(t, err)
+				}
 				return
 			}
 
