@@ -20,10 +20,11 @@ import (
 	"encoding/json"
 	"net/url"
 
+	"github.com/gravitational/trace"
+
 	"github.com/gravitational/teleport/lib/auth/authclient"
 	wantypes "github.com/gravitational/teleport/lib/auth/webauthntypes"
 	"github.com/gravitational/teleport/lib/secret"
-	"github.com/gravitational/trace"
 )
 
 // Payload type required by (lib/client/sso/redirector.go).
