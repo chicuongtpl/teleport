@@ -52,9 +52,10 @@ func NewMemoryUploader(cfg ...MemoryUploaderConfig) *MemoryUploader {
 		mtx:              &sync.RWMutex{},
 		uploads:          make(map[string]*MemoryUpload),
 		sessions:         make(map[session.ID][]byte),
+		tempSessions:     make(map[string][]byte),
 		summaries:        make(map[session.ID][]byte),
 		pendingSummaries: make(map[session.ID][]byte),
-		Metadata:         make(map[session.ID][]byte),
+		metadata:         make(map[session.ID][]byte),
 		thumbnails:       make(map[session.ID][]byte),
 	}
 	if len(cfg) != 0 {
@@ -70,9 +71,10 @@ type MemoryUploader struct {
 	mtx              *sync.RWMutex
 	uploads          map[string]*MemoryUpload
 	sessions         map[session.ID][]byte
+	tempSessions     map[string][]byte
 	summaries        map[session.ID][]byte
 	pendingSummaries map[session.ID][]byte
-	Metadata         map[session.ID][]byte
+	metadata         map[session.ID][]byte
 	thumbnails       map[session.ID][]byte
 
 	// Clock is an optional [clockwork.Clock] to determine the time to associate
@@ -93,6 +95,8 @@ type MemoryUpload struct {
 	// Initiated contains the timestamp of when the upload
 	// was initiated, not always initialized
 	Initiated time.Time
+
+	temporary bool
 }
 
 type part struct {
@@ -116,20 +120,22 @@ func (m *MemoryUploader) Reset() {
 	defer m.mtx.Unlock()
 	m.uploads = make(map[string]*MemoryUpload)
 	m.sessions = make(map[session.ID][]byte)
+	m.tempSessions = make(map[string][]byte)
 	m.summaries = make(map[session.ID][]byte)
 	m.pendingSummaries = make(map[session.ID][]byte)
-	m.Metadata = make(map[session.ID][]byte)
+	m.metadata = make(map[session.ID][]byte)
 	m.thumbnails = make(map[session.ID][]byte)
 }
 
 // CreateUpload creates a multipart upload
-func (m *MemoryUploader) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
+func (m *MemoryUploader) CreateUpload(ctx context.Context, sessionID session.ID, temporary bool) (*events.StreamUpload, error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 	upload := &events.StreamUpload{
 		ID:        uuid.New().String(),
 		SessionID: sessionID,
 		Initiated: time.Now(),
+		Temporary: temporary,
 	}
 	if m.Clock != nil {
 		upload.Initiated = m.Clock.Now()
@@ -139,6 +145,7 @@ func (m *MemoryUploader) CreateUpload(ctx context.Context, sessionID session.ID,
 		sessionID: sessionID,
 		parts:     make(map[int64]part),
 		Initiated: upload.Initiated,
+		temporary: temporary,
 	}
 	return upload, nil
 }
@@ -171,7 +178,11 @@ func (m *MemoryUploader) CompleteUpload(ctx context.Context, upload events.Strea
 			delete(up.parts, number)
 		}
 	}
-	m.sessions[upload.SessionID] = result
+	if upload.Temporary {
+		m.tempSessions[upload.ID] = result
+	} else {
+		m.sessions[upload.SessionID] = result
+	}
 	up.completed = true
 	m.trySendEvent(events.UploadEvent{SessionID: string(upload.SessionID), UploadID: upload.ID})
 	return nil
@@ -326,7 +337,7 @@ func (m *MemoryUploader) UploadSummary(ctx context.Context, sessionID session.ID
 func (m *MemoryUploader) UploadMetadata(ctx context.Context, sessionID session.ID, readCloser io.Reader) (string, error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
-	_, ok := m.Metadata[sessionID]
+	_, ok := m.metadata[sessionID]
 	if ok {
 		return "", trace.AlreadyExists("metadata %q already exists", sessionID)
 	}
@@ -334,7 +345,7 @@ func (m *MemoryUploader) UploadMetadata(ctx context.Context, sessionID session.I
 	if err != nil {
 		return "", trace.ConvertSystemError(err)
 	}
-	m.Metadata[sessionID] = data
+	m.metadata[sessionID] = data
 	return string(sessionID), nil
 }
 
@@ -394,7 +405,7 @@ func (m *MemoryUploader) DownloadMetadata(ctx context.Context, sessionID session
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
 
-	data, ok := m.Metadata[sessionID]
+	data, ok := m.metadata[sessionID]
 	if !ok {
 		return trace.NotFound("metadata %q is not found", sessionID)
 	}
@@ -492,6 +503,15 @@ func (m *MemoryUploader) UploadEncryptedRecording(ctx context.Context, sessionID
 	return trace.Wrap(m.CompleteUpload(ctx, *upload, streamParts), "completing upload")
 }
 
+func (m *MemoryUploader) RecordingExists(ctx context.Context, sessionID session.ID, uploadID string) bool {
+	if uploadID != "" {
+		_, ok := m.tempSessions[uploadID]
+		return ok
+	}
+	_, ok := m.sessions[sessionID]
+	return ok
+}
+
 // MockUploader is a limited implementation of [events.MultipartUploader] that
 // allows injecting errors for testing purposes. [MemoryUploader] is a more
 // complete implementation and should be preferred for testing the happy path.
@@ -506,7 +526,7 @@ type MockUploader struct {
 	MockCompleteUpload func(ctx context.Context, upload events.StreamUpload, parts []events.StreamPart) error
 }
 
-func (m *MockUploader) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
+func (m *MockUploader) CreateUpload(ctx context.Context, sessionID session.ID, temporary bool) (*events.StreamUpload, error) {
 	if m.CreateUploadError != nil {
 		return nil, m.CreateUploadError
 	}

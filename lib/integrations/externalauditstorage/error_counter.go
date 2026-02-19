@@ -435,9 +435,13 @@ func (c *ErrorCountingSessionHandler) DownloadThumbnail(ctx context.Context, ses
 	return err
 }
 
+func (c *ErrorCountingSessionHandler) RecordingExists(ctx context.Context, sessionID session.ID, uploadID string) bool {
+	return false
+}
+
 // CreateUpload calls [c.wrapped.CreateUpload] and counts the error or success.
-func (c *ErrorCountingSessionHandler) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
-	res, err := c.wrapped.CreateUpload(ctx, sessionID, intermediate)
+func (c *ErrorCountingSessionHandler) CreateUpload(ctx context.Context, sessionID session.ID, temporary bool) (*events.StreamUpload, error) {
+	res, err := c.wrapped.CreateUpload(ctx, sessionID, temporary)
 	c.uploads.observe(err)
 	return res, err
 }

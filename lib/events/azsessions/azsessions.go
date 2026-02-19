@@ -436,9 +436,13 @@ func (h *Handler) downloadBlob(ctx context.Context, sessionID session.ID, blob *
 	return nil
 }
 
+func (h *Handler) RecordingExists(ctx context.Context, sessionID session.ID, uploadID string) bool {
+	return false
+}
+
 // CreateUpload implements [events.MultipartUploader].
-func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
-	if intermediate {
+func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID, temporary bool) (*events.StreamUpload, error) {
+	if temporary {
 		return nil, trace.NotImplemented("az backend does not implement reuploads")
 	}
 	upload := events.StreamUpload{

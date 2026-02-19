@@ -391,6 +391,10 @@ func (h *Handler) downloadFile(ctx context.Context, path string, writer io.Write
 	return nil
 }
 
+func (h *Handler) RecordingExists(ctx context.Context, sessionID session.ID, uploadID string) bool {
+	return false
+}
+
 func (h *Handler) recordingPath(sessionID session.ID) string {
 	if h.Path == "" {
 		return string(sessionID) + ".tar"

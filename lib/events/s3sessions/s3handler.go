@@ -559,6 +559,10 @@ func (h *Handler) downloadFile(
 	return trace.Wrap(lastErr, "failed to download file after %d attempts", maxDownloadRetries)
 }
 
+func (h *Handler) RecordingExists(ctx context.Context, sessionID session.ID, uploadID string) bool {
+	return false
+}
+
 // versionID is used to store versions of a key to allow sorting by timestamp.
 type versionID struct {
 	// ID is the version ID.

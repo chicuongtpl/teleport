@@ -1125,12 +1125,12 @@ type StreamUpload struct {
 	// was initiated, not always initialized
 	Initiated time.Time
 
-	Intermediate bool
+	Temporary bool
 }
 
 // String returns user friendly representation of the upload
 func (u StreamUpload) String() string {
-	return fmt.Sprintf("Upload(session=%v, id=%v, initiated=%v)", u.SessionID, u.ID, u.Initiated)
+	return fmt.Sprintf("Upload(session=%v, id=%v, initiated=%v, temporary=%v)", u.SessionID, u.ID, u.Initiated, u.Temporary)
 }
 
 // CheckAndSetDefaults checks and sets default values
@@ -1231,7 +1231,7 @@ type SessionStreamer interface {
 }
 
 type UploadStreamer interface {
-	StreamUploadEvents(ctx context.Context, sessionID session.ID, uploadID string, startIndex int64)
+	StreamUploadEvents(ctx context.Context, sessionID session.ID, uploadID string, startIndex int64) (chan apievents.AuditEvent, chan error)
 }
 
 // EncryptedRecordingUploader takes a session ID and a sequence of encrypted

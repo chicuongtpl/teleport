@@ -43,8 +43,8 @@ import (
 )
 
 // CreateUpload creates a multipart upload
-func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID, intermediate bool) (*events.StreamUpload, error) {
-	if intermediate {
+func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID, temporary bool) (*events.StreamUpload, error) {
+	if temporary {
 		return nil, trace.NotImplemented("")
 	}
 	start := time.Now()

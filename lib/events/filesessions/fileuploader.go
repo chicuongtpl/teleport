@@ -121,9 +121,8 @@ func (l *Handler) Close() error {
 // Download reads a session recording from a local directory.
 func (l *Handler) Download(ctx context.Context, sessionID session.ID, uploadID string, writer io.Writer) error {
 	return trace.Wrap(downloadFile(l.recordingPath(events.StreamUpload{
-		ID:           uploadID,
-		SessionID:    sessionID,
-		Intermediate: uploadID != "",
+		ID:        uploadID,
+		SessionID: sessionID,
 	}), writer))
 }
 
@@ -207,6 +206,15 @@ func (l *Handler) UploadThumbnail(ctx context.Context, sessionID session.ID, rea
 	return uploadFile(l.thumbnailPath(sessionID), reader, withOverwrite())
 }
 
+func (l *Handler) RecordingExists(ctx context.Context, sessionID session.ID, uploadID string) bool {
+	path := l.recordingPath(events.StreamUpload{
+		ID:        uploadID,
+		SessionID: sessionID,
+	})
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 type fileUploadConfig struct {
 	overwrite bool
 }
@@ -241,7 +249,7 @@ func uploadFile(path string, reader io.Reader, opts ...fileUploadOption) (string
 }
 
 func (l *Handler) recordingPath(upload events.StreamUpload) string {
-	if upload.Intermediate {
+	if upload.ID != "" {
 		return filepath.Join(l.uploadRootPath(upload), string(upload.SessionID)+tarExt)
 	}
 	return filepath.Join(l.Directory, string(upload.SessionID)+tarExt)

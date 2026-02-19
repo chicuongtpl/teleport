@@ -29,29 +29,42 @@ import (
 type MockAuditLog struct {
 	*events.DiscardAuditLog
 
-	Emitter       *MockRecorderEmitter
-	SessionEvents []apievents.AuditEvent
+	Emitter           *MockRecorderEmitter
+	SessionEvents     []apievents.AuditEvent
+	TempSessionEvents []apievents.AuditEvent
 }
 
-func (m *MockAuditLog) StreamSessionEvents(ctx context.Context, sid session.ID, startIndex int64) (chan apievents.AuditEvent, chan error) {
+func (m *MockAuditLog) streamEvents(ctx context.Context, sid session.ID, useTemp bool, startIndex int64) (chan apievents.AuditEvent, chan error) {
 	errors := make(chan error, 1)
 	events := make(chan apievents.AuditEvent)
-
+	srcEvents := m.SessionEvents
+	if useTemp {
+		srcEvents = m.TempSessionEvents
+	}
 	go func() {
 		defer close(events)
 
-		for _, event := range m.SessionEvents {
+		for _, event := range srcEvents {
 			if event.GetIndex() >= startIndex {
 				select {
 				case <-ctx.Done():
 					return
 				case events <- event:
 				}
+			} else {
 			}
 		}
 	}()
 
 	return events, errors
+}
+
+func (m *MockAuditLog) StreamSessionEvents(ctx context.Context, sid session.ID, startIndex int64) (chan apievents.AuditEvent, chan error) {
+	return m.streamEvents(ctx, sid, false, startIndex)
+}
+
+func (m *MockAuditLog) StreamUploadEvents(ctx context.Context, sid session.ID, uploadID string, startIndex int64) (chan apievents.AuditEvent, chan error) {
+	return m.streamEvents(ctx, sid, uploadID != "", startIndex)
 }
 
 func (m *MockAuditLog) EmitAuditEvent(ctx context.Context, event apievents.AuditEvent) error {

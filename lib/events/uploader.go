@@ -61,6 +61,8 @@ type UploadHandler interface {
 	UploadThumbnail(ctx context.Context, sessionID session.ID, readCloser io.Reader) (string, error)
 	// DownloadThumbnail downloads a session thumbnail and writes it to a writer.
 	DownloadThumbnail(ctx context.Context, sessionID session.ID, writer io.Writer) error
+
+	RecordingExists(ctx context.Context, sessionID session.ID, uploadID string) bool
 }
 
 // TODO(tigrato): remove this type once `e` no longer references it.
