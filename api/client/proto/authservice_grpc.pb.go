@@ -311,7 +311,6 @@ const (
 	AuthService_UpdateClusterMaintenanceConfig_FullMethodName      = "/proto.AuthService/UpdateClusterMaintenanceConfig"
 	AuthService_DeleteClusterMaintenanceConfig_FullMethodName      = "/proto.AuthService/DeleteClusterMaintenanceConfig"
 	AuthService_ValidateTrustedCluster_FullMethodName              = "/proto.AuthService/ValidateTrustedCluster"
-	AuthService_ValidateBrowserMFAChallenge_FullMethodName         = "/proto.AuthService/ValidateBrowserMFAChallenge"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -1074,13 +1073,6 @@ type AuthServiceClient interface {
 	// by the proxy on behalf of a cluster that wishes to join to this one as a
 	// leaf cluster.
 	ValidateTrustedCluster(ctx context.Context, in *ValidateTrustedClusterRequest, opts ...grpc.CallOption) (*ValidateTrustedClusterResponse, error)
-	// ValidateBrowserMFAChallenge validates browser MFA challenge responses.
-	// This is called when a user has been sent to the browser to solve an MFA challenge
-	// that was triggered by tsh or tctl. When the user solves the MFA challenge, the
-	// response is sent to this RPC. ValidateBrowserMFAChallenge will validate the MFA
-	// response, encrypt it, append it to tsh/tctl's callback URL and return it to the browser.
-	// More info: https://github.com/gravitational/teleport/blob/master/rfd/0233-tsh-browser-mfa.md
-	ValidateBrowserMFAChallenge(ctx context.Context, in *ValidateBrowserMFAChallengeRequest, opts ...grpc.CallOption) (*ValidateBrowserMFAChallengeResponse, error)
 }
 
 type authServiceClient struct {
@@ -4003,16 +3995,6 @@ func (c *authServiceClient) ValidateTrustedCluster(ctx context.Context, in *Vali
 	return out, nil
 }
 
-func (c *authServiceClient) ValidateBrowserMFAChallenge(ctx context.Context, in *ValidateBrowserMFAChallengeRequest, opts ...grpc.CallOption) (*ValidateBrowserMFAChallengeResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ValidateBrowserMFAChallengeResponse)
-	err := c.cc.Invoke(ctx, AuthService_ValidateBrowserMFAChallenge_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // AuthServiceServer is the server API for AuthService service.
 // All implementations should embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -4773,13 +4755,6 @@ type AuthServiceServer interface {
 	// by the proxy on behalf of a cluster that wishes to join to this one as a
 	// leaf cluster.
 	ValidateTrustedCluster(context.Context, *ValidateTrustedClusterRequest) (*ValidateTrustedClusterResponse, error)
-	// ValidateBrowserMFAChallenge validates browser MFA challenge responses.
-	// This is called when a user has been sent to the browser to solve an MFA challenge
-	// that was triggered by tsh or tctl. When the user solves the MFA challenge, the
-	// response is sent to this RPC. ValidateBrowserMFAChallenge will validate the MFA
-	// response, encrypt it, append it to tsh/tctl's callback URL and return it to the browser.
-	// More info: https://github.com/gravitational/teleport/blob/master/rfd/0233-tsh-browser-mfa.md
-	ValidateBrowserMFAChallenge(context.Context, *ValidateBrowserMFAChallengeRequest) (*ValidateBrowserMFAChallengeResponse, error)
 }
 
 // UnimplementedAuthServiceServer should be embedded to have
@@ -5613,9 +5588,6 @@ func (UnimplementedAuthServiceServer) DeleteClusterMaintenanceConfig(context.Con
 }
 func (UnimplementedAuthServiceServer) ValidateTrustedCluster(context.Context, *ValidateTrustedClusterRequest) (*ValidateTrustedClusterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidateTrustedCluster not implemented")
-}
-func (UnimplementedAuthServiceServer) ValidateBrowserMFAChallenge(context.Context, *ValidateBrowserMFAChallengeRequest) (*ValidateBrowserMFAChallengeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ValidateBrowserMFAChallenge not implemented")
 }
 func (UnimplementedAuthServiceServer) testEmbeddedByValue() {}
 
@@ -10433,24 +10405,6 @@ func _AuthService_ValidateTrustedCluster_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthService_ValidateBrowserMFAChallenge_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ValidateBrowserMFAChallengeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthServiceServer).ValidateBrowserMFAChallenge(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthService_ValidateBrowserMFAChallenge_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthServiceServer).ValidateBrowserMFAChallenge(ctx, req.(*ValidateBrowserMFAChallengeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -11485,10 +11439,6 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ValidateTrustedCluster",
 			Handler:    _AuthService_ValidateTrustedCluster_Handler,
-		},
-		{
-			MethodName: "ValidateBrowserMFAChallenge",
-			Handler:    _AuthService_ValidateBrowserMFAChallenge_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
