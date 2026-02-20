@@ -216,7 +216,7 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 			},
 			wantError: false,
 			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Equal(t, "", extensions.UserVerificationRequirement)
+				require.Empty(t, extensions.UserVerificationRequirement)
 			},
 		},
 		{
