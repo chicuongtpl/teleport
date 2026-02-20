@@ -290,7 +290,7 @@ func (c *heartbeatV2Config) SetDefaults() {
 		// default to 2/3rds of the default server expiry.  since we use the "seventh jitter"
 		// for our periodics, that translates to an average interval of ~6m, a slight increase
 		// from the average of ~5m30s that was used for V1 ssh server heartbeats.
-		c.announceInterval = 2 * (apidefaults.ServerAnnounceTTL / 3)
+		c.announceInterval = 20 * time.Second //2 * (apidefaults.ServerAnnounceTTL / 3)
 	}
 	if c.disruptionAnnounceInterval == 0 {
 		// if there was a disruption in the control stream, we want to heartbeat a bit

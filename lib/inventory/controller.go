@@ -303,11 +303,11 @@ func NewController(auth Auth, usageReporter usagereporter.UsageReporter, opts ..
 
 		relayHBVariableDuration *interval.VariableDuration
 	)
-	serverTTL := apidefaults.ServerAnnounceTTL
+	serverTTL := time.Minute //apidefaults.ServerAnnounceTTL
 	if !variableRateHeartbeatsDisabledEnv() {
 		// by default, heartbeats will scale from 1.5 to 6 minutes, and will
 		// have a TTL of 15 minutes
-		serverTTL = apidefaults.ServerAnnounceTTL * 3 / 2
+		serverTTL = time.Minute //apidefaults.ServerAnnounceTTL * 3 / 2
 		sshHBVariableDuration = interval.NewVariableDuration(interval.VariableDurationConfig{
 			MinDuration: options.serverKeepAlive,
 			MaxDuration: options.serverKeepAlive * 4,
