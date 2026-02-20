@@ -265,7 +265,7 @@ type UaccMetadata struct {
 // system state related to the process and/or thread for PAM and SELinux.
 // The process should exit after this function returns so the potentially
 // modified process and/or thread isn't used with a non-standard state.
-func RunCommand() (code int, err error) {
+func RunCommand() (execErr error, err error) {
 	ctx := context.Background()
 
 	// SIGQUIT is used by teleport to initiate graceful shutdown, waiting for
@@ -277,29 +277,29 @@ func RunCommand() (code int, err error) {
 	// Parent sends the command payload in the third file descriptor.
 	cmdfd := os.NewFile(CommandFile, fdName(CommandFile))
 	if cmdfd == nil {
-		return teleport.RemoteCommandFailure, trace.BadParameter("command pipe not found")
+		return nil, trace.BadParameter("command pipe not found")
 	}
 	logfd := os.NewFile(LogFile, fdName(LogFile))
 	if logfd == nil {
-		return teleport.RemoteCommandFailure, trace.BadParameter("log pipe not found")
+		return nil, trace.BadParameter("log pipe not found")
 	}
 	contfd := os.NewFile(ContinueFile, fdName(ContinueFile))
 	if contfd == nil {
-		return teleport.RemoteCommandFailure, trace.BadParameter("continue pipe not found")
+		return nil, trace.BadParameter("continue pipe not found")
 	}
 	readyfd := os.NewFile(ReadyFile, fdName(ReadyFile))
 	if readyfd == nil {
-		return teleport.RemoteCommandFailure, trace.BadParameter("ready pipe not found")
+		return nil, trace.BadParameter("ready pipe not found")
 	}
 	terminatefd := os.NewFile(TerminateFile, fdName(TerminateFile))
 	if terminatefd == nil {
-		return teleport.RemoteCommandFailure, trace.BadParameter("terminate pipe not found")
+		return nil, trace.BadParameter("terminate pipe not found")
 	}
 
 	// Read in the command payload.
 	var c ExecCommand
 	if err := json.NewDecoder(cmdfd).Decode(&c); err != nil {
-		return teleport.RemoteCommandFailure, trace.Wrap(err)
+		return nil, trace.Wrap(err)
 	}
 
 	// If BPF is enabled, ensure that the ready file is closed if a
@@ -349,7 +349,7 @@ func RunCommand() (code int, err error) {
 	if c.RecordWithBPF {
 		loginUIDBytes, err = os.ReadFile(procLoginuid)
 		if err != nil {
-			return exitCode(err), trace.Wrap(err)
+			return nil, trace.Wrap(err)
 		}
 	}
 
@@ -359,7 +359,7 @@ func RunCommand() (code int, err error) {
 		// If this is an interactive session, use the tty file for grandchild stdio.
 		tty = os.NewFile(TTYFile, fdName(TTYFile))
 		if tty == nil {
-			return teleport.RemoteCommandFailure, trace.BadParameter("tty not found")
+			return nil, trace.BadParameter("tty not found")
 		}
 		shellStdio.in = tty
 		shellStdio.out = tty
@@ -376,15 +376,15 @@ func RunCommand() (code int, err error) {
 		// If this is a normal, non-interactive exec session, use the stdio pipes provided as extra files.
 		shellStdio.in = os.NewFile(StdinFile, fdName(StdinFile))
 		if shellStdio.in == nil {
-			return teleport.RemoteCommandFailure, trace.BadParameter("stdin not found")
+			return nil, trace.BadParameter("stdin not found")
 		}
 		shellStdio.out = os.NewFile(StdoutFile, fdName(StdoutFile))
 		if shellStdio.out == nil {
-			return teleport.RemoteCommandFailure, trace.BadParameter("stdout not found")
+			return nil, trace.BadParameter("stdout not found")
 		}
 		shellStdio.err = os.NewFile(StderrFile, fdName(StderrFile))
 		if shellStdio.err == nil {
-			return teleport.RemoteCommandFailure, trace.BadParameter("stderr not found")
+			return nil, trace.BadParameter("stderr not found")
 		}
 	}
 
@@ -417,7 +417,7 @@ func RunCommand() (code int, err error) {
 		// Open the PAM context.
 		pamContext, err := pam.Open(cfg)
 		if err != nil {
-			return exitCode(err), trace.Wrap(err, "failed to open PAM context")
+			return nil, trace.Wrap(err, "failed to open PAM context")
 		}
 		defer pamContext.Close()
 
@@ -437,14 +437,14 @@ func RunCommand() (code int, err error) {
 		if uaccErr := uaccHandler.FailedLogin(c.Login, &c.UaccMetadata.RemoteAddr); uaccErr != nil {
 			slog.DebugContext(ctx, "unable to write failed login attempt to uacc", "error", uaccErr)
 		}
-		return teleport.RemoteCommandFailure, trace.Wrap(err)
+		return nil, trace.Wrap(err)
 	}
 
 	// Ensure this process has a unique audit login session ID (auid) set
 	// so Enhanced Session Recording can track events correctly.
 	if c.RecordWithBPF {
 		if err := setAuditSessionID(ctx, c, loginUIDBytes, localUser, readyfd); err != nil {
-			return exitCode(err), trace.Wrap(err)
+			return nil, trace.Wrap(err)
 		}
 	}
 
@@ -467,7 +467,7 @@ func RunCommand() (code int, err error) {
 	// Build the actual command that will launch the shell.
 	cmd, err := buildCommand(&c, localUser, shellStdio, pamEnvironment)
 	if err != nil {
-		return teleport.RemoteCommandFailure, trace.Wrap(err)
+		return nil, trace.Wrap(err)
 	}
 
 	// Wait until the continue signal is received from Teleport signaling that
@@ -475,7 +475,7 @@ func RunCommand() (code int, err error) {
 	if c.RecordWithBPF {
 		err = waitForSignal(ctx, contfd, 10*time.Second)
 		if err != nil {
-			return teleport.RemoteCommandFailure, trace.Wrap(err)
+			return nil, trace.Wrap(err)
 		}
 		slog.DebugContext(ctx, "Received continue signal")
 	}
@@ -494,7 +494,7 @@ func RunCommand() (code int, err error) {
 			cmd.SysProcAttr.Credential,
 			c.Login, &systemUser{u: localUser})
 		if err != nil {
-			return teleport.RemoteCommandFailure, trace.Wrap(err)
+			return nil, trace.Wrap(err)
 		}
 	}
 
@@ -508,7 +508,7 @@ func RunCommand() (code int, err error) {
 	if c.SetSELinuxContext {
 		seContext, err := selinux.UserContext(c.Login)
 		if err != nil {
-			return teleport.RemoteCommandFailure, trace.Wrap(err, "failed to get SELinux context of login user")
+			return nil, trace.Wrap(err, "failed to get SELinux context of login user")
 		}
 
 		// SetExecLabel changes the SELinux exec context for the
@@ -520,21 +520,20 @@ func RunCommand() (code int, err error) {
 		// restrictive)SELinux context.
 		runtime.LockOSThread()
 		if err := ocselinux.SetExecLabel(seContext); err != nil {
-			return teleport.RemoteCommandFailure, trace.Wrap(err, "failed to set SELinux context")
+			return nil, trace.Wrap(err, "failed to set SELinux context")
 		}
 	}
 
 	// Start the command.
 	if err := cmd.Start(); err != nil {
-		return teleport.RemoteCommandFailure, trace.Wrap(err)
+		return nil, trace.Wrap(err)
 	}
 	slog.DebugContext(ctx, "Started command")
 
 	parkerCancel()
 
-	err = waitForShell(terminatefd, cmd)
-
-	return exitCode(err), trace.Wrap(err)
+	execErr = waitForShell(terminatefd, cmd)
+	return trace.Wrap(execErr), nil
 }
 
 // setAuditSessionID ensures the audit login session ID is updated by
@@ -1088,7 +1087,13 @@ func RunAndExit(commandType string) {
 
 	switch commandType {
 	case teleport.ExecSubCommand:
-		code, err = RunCommand()
+		var execErr error
+		execErr, err = RunCommand()
+		if err != nil {
+			code = teleport.RemoteCommandFailure
+		} else {
+			code = exitCode(execErr)
+		}
 	case teleport.NetworkingSubCommand:
 		code, err = RunNetworking()
 	case teleport.CheckHomeDirSubCommand:
