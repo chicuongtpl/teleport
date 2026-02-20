@@ -4517,10 +4517,14 @@ func convertSSHExitCode(tc *client.TeleportClient, err error) error {
 			// Already have an exitCodeError, return that.
 			return trace.Wrap(err)
 		}
-		if err != nil && status != teleport.RemoteCommandFailure {
-			// Print the error here so we don't lose it when returning the exitCodeError.
+
+		// If we have a non ssh.ExitError, or an ssh.ExitError with a custom msg/signal field,
+		// print the error before we lose it when returning the exitCodeError.
+		var sshExitErr *ssh.ExitError
+		if err != nil && (!errors.As(err, &sshExitErr) || sshExitErr.Msg() != "" || sshExitErr.Signal() != "") {
 			fmt.Fprintln(tc.Stderr, utils.UserMessageFromError(err))
 		}
+
 		err = &common.ExitCodeError{Code: status}
 		return trace.Wrap(err)
 	}
