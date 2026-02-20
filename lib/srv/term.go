@@ -614,9 +614,6 @@ func (t *remoteTerminal) Run(ctx context.Context) error {
 		w: stdin,
 	}
 
-	// Propagate stderr to the session parties.
-	t.session.Stderr = sess.Stderr()
-
 	// if a specific term type was not requested, then pick the default one and request a pty
 	if t.termType == "" {
 		t.termType = defaultTerm
