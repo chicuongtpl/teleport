@@ -154,6 +154,11 @@ type Server struct {
 
 	// watcher monitors changes to application resources.
 	watcher *services.GenericWatcher[types.Application, readonly.Application]
+
+	// reconcileDone is closed after the first successful
+	// reconciliation cycle completes.
+	reconcileDone     chan struct{}
+	reconcileDoneOnce sync.Once
 }
 
 // monitoredApps is a collection of applications from different sources
@@ -207,9 +212,10 @@ func New(ctx context.Context, c *Config) (*Server, error) {
 		monitoredApps: monitoredApps{
 			static: c.Apps,
 		},
-		reconcileCh:  make(chan struct{}),
-		closeFunc:    closeFunc,
-		closeContext: closeContext,
+		reconcileCh:   make(chan struct{}),
+		reconcileDone: make(chan struct{}),
+		closeFunc:     closeFunc,
+		closeContext:  closeContext,
 	}
 
 	s.c.ConnectionsHandler.SetApplicationsProvider(s.GetAppByPublicAddress)
@@ -453,7 +459,60 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		}()
 	}
 
+	// Clean up orphaned app server records left behind by a previous
+	// instance (e.g. after SIGHUP reload removed an app from config).
+	go s.cleanupOrphanedAppServers(ctx)
+
 	return nil
+}
+
+// cleanupOrphanedAppServers deletes app server heartbeat records
+// belonging to this host that no longer correspond to a running app.
+// This handles the case where an app is removed from config and the
+// agent is reloaded: the old heartbeat record is orphaned because no
+// process deletes it, and it lingers until TTL expiry.
+func (s *Server) cleanupOrphanedAppServers(ctx context.Context) {
+	// If the resource watcher is active, wait for the first
+	// reconciliation so s.apps includes dynamic apps. Without
+	// this, cleanup would incorrectly delete heartbeat records
+	// for dynamic apps not yet reconciled.
+	if s.watcher != nil {
+		select {
+		case <-s.reconcileDone:
+		case <-ctx.Done():
+			return
+		}
+	}
+
+	servers, err := s.c.AuthClient.GetApplicationServers(ctx, apidefaults.Namespace)
+	if err != nil {
+		s.log.WarnContext(ctx, "Failed to list app servers for orphan cleanup.", "error", err)
+		return
+	}
+
+	s.mu.RLock()
+	currentApps := make(map[string]struct{}, len(s.apps))
+	for name := range s.apps {
+		currentApps[name] = struct{}{}
+	}
+	s.mu.RUnlock()
+
+	for _, server := range servers {
+		if server.GetHostID() != s.c.HostID {
+			continue
+		}
+		name := server.GetApp().GetName()
+		if _, ok := currentApps[name]; ok {
+			continue
+		}
+		if err := s.removeAppServer(ctx, name); err != nil {
+			s.log.WarnContext(ctx, "Failed to remove orphaned app server.",
+				"app", name, "error", err)
+			continue
+		}
+		s.log.InfoContext(ctx, "Removed orphaned app server on startup.",
+			"app", name)
+	}
 }
 
 // Close will shut the server down and unblock any resources.
