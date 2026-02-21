@@ -8287,6 +8287,13 @@ func TestSSHStderrorPropagation(t *testing.T) {
 		},
 	}
 
+	err = Run(ctx, []string{
+		"login",
+		"--insecure",
+		"--proxy", proxyAddr.String(),
+	}, setHomePath(homePath), setMockSSOLogin(authServer, userMissingLogin, connector.GetName()))
+	require.NoError(t, err)
+
 	for _, rm := range recordingModes {
 		t.Run(rm.name, func(t *testing.T) {
 			recCfg := types.DefaultSessionRecordingConfig()
@@ -8294,15 +8301,9 @@ func TestSSHStderrorPropagation(t *testing.T) {
 			_, err := authServer.UpsertSessionRecordingConfig(ctx, recCfg)
 			require.NoError(t, err)
 
-			err = Run(ctx, []string{
-				"login",
-				"--insecure",
-				"--proxy", proxyAddr.String(),
-			}, setHomePath(homePath), setMockSSOLogin(authServer, userMissingLogin, connector.GetName()))
-			require.NoError(t, err)
-
 			for _, sc := range sshCases {
 				t.Run(sc.name, func(t *testing.T) {
+					t.Parallel()
 					stderr := &output{buf: bytes.Buffer{}}
 
 					args := []string{"ssh", "--insecure"}

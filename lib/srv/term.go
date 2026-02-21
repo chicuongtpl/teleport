@@ -146,6 +146,10 @@ type terminal struct {
 	// the process running in the shell should be killed.
 	terminateFD *os.File
 
+	// childStderrDone is closed when child process stderr is fully read and
+	// propagated to the SSH session stderr stream.
+	childStderrDone chan struct{}
+
 	pid int
 
 	termType string
@@ -228,7 +232,9 @@ func (t *terminal) Run(ctx context.Context) error {
 	defer stderrw.Close()
 	t.cmd.Stderr = stderrw
 
+	t.childStderrDone = make(chan struct{})
 	go func() {
+		defer close(t.childStderrDone)
 		defer stderrr.Close()
 
 		childErr, err := reexec.ReadChildError(stderrr)
@@ -268,6 +274,7 @@ func (t *terminal) Run(ctx context.Context) error {
 // Wait will block until the terminal is complete.
 func (t *terminal) Wait() (*ExecResult, error) {
 	err := t.cmd.Wait()
+	<-t.childStderrDone
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {

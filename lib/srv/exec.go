@@ -133,6 +133,10 @@ type localExec struct {
 	// Ctx holds the *ServerContext.
 	Ctx *ServerContext
 
+	// childStderrDone is closed when child process stderr is fully read and
+	// propagated to the SSH channel.
+	childStderrDone chan struct{}
+
 	pid int
 }
 
@@ -197,7 +201,9 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 	defer stderrw.Close()
 	e.Cmd.Stderr = stderrw
 
+	e.childStderrDone = make(chan struct{})
 	go func() {
+		defer close(e.childStderrDone)
 		defer stderrr.Close()
 
 		childErr, err := reexec.ReadChildError(stderrr)
@@ -266,6 +272,7 @@ func (e *localExec) Wait() *ExecResult {
 
 	// Block until the command is finished executing.
 	err := e.Cmd.Wait()
+	<-e.childStderrDone
 	if err != nil {
 		e.Ctx.Logger.DebugContext(e.Ctx.CancelContext(), "Local command failed", "error", err)
 	} else {
