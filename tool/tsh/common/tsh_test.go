@@ -8212,6 +8212,9 @@ func TestSSHStderrPropagation(t *testing.T) {
 	connector := mockConnector(t)
 
 	createAgent(t)
+	// X11 request handling requires a valid DISPLAY env var. Set one explicitly so
+	// this test does not depend on ambient CI worker configuration.
+	t.Setenv(x11.DisplayEnv, ":0")
 
 	// Use a non-existent OS user to force reexec failures in the node.
 	missingLogin := "does-not-exist"
