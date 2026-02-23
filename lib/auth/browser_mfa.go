@@ -55,7 +55,8 @@ func (a *Server) ValidateBrowserMFAChallenge(ctx context.Context, requestID stri
 	}
 
 	wr := wantypes.CredentialAssertionResponseFromProto(webauthnResponse)
-	if err := webLogin.Validate(ctx,
+	// TODO(danielashare): Switch this to the Validate function once #63978 is merged
+	if _, err := webLogin.Finish(ctx,
 		mfaSession.Username,
 		wr,
 		&mfav1.ChallengeExtensions{
