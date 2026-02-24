@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/lib/auth/mfatypes"
