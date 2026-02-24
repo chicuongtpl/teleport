@@ -1461,6 +1461,11 @@ type Server struct {
 	// normally be fetched from the GitHub API. Used for testing.
 	GithubUserAndTeamsOverride func() (*GithubUserResponse, []GithubTeamResponse, error)
 
+	// BrowserMFAChallengeExtensionsObserver, if set, is called with the resolved
+	// challenge extensions when a BrowserMFARequestID is provided to
+	// CreateAuthenticateChallenge. Used for testing.
+	BrowserMFAChallengeExtensionsObserver func(*mfav1.ChallengeExtensions)
+
 	// AWSRolesAnywhereCreateSessionOverride overrides the AWS Roles Anywhere Create Session API wrapper with a mocked one.
 	// Used for testing.
 	AWSRolesAnywhereCreateSessionOverride func(ctx context.Context, req createsession.CreateSessionRequest) (*createsession.CreateSessionResponse, error)
@@ -4405,19 +4410,25 @@ func (a *Server) CreateAuthenticateChallenge(ctx context.Context, req *proto.Cre
 	if req.BrowserMFARequestID != "" {
 		browserMFAReq, err := a.GetSSOMFASession(ctx, req.BrowserMFARequestID)
 		if err != nil {
-			a.logger.ErrorContext(ctx, "Failed to get browser MFA request", "error", err)
+			a.logger.WarnContext(ctx, "Failed to read SSO MFA session for browser MFA request", "error", err)
 			return nil, trace.AccessDenied("invalid browser MFA request")
 		}
 
 		chalExts := browserMFAReq.ChallengeExtensions
 		if chalExts == nil {
-			a.logger.ErrorContext(ctx, "Failed to get challenge extensions from browser MFA request", "request_id", req.BrowserMFARequestID)
+			a.logger.WarnContext(ctx, "SSO MFA session for browser MFA recorded with empty challenge extensions", "request_id", req.BrowserMFARequestID)
 			return nil, trace.BadParameter("no challenge extensions present")
 		}
 
-		challengeExtensions.Scope = chalExts.Scope
-		challengeExtensions.AllowReuse = chalExts.AllowReuse
-		challengeExtensions.UserVerificationRequirement = chalExts.UserVerificationRequirement
+		// Replace the challenge extensions with the ones found in the SSO MFA object.
+		// These are the ones from the original tsh request.
+		challengeExtensions = mfatypes.ChallengeExtensionsToProto(chalExts)
+
+		// Used for testing. If observer function is set, call it with
+		// challenge extensions from SSO MFA session.
+		if a.BrowserMFAChallengeExtensionsObserver != nil {
+			a.BrowserMFAChallengeExtensionsObserver(challengeExtensions)
+		}
 	}
 
 	switch req.GetRequest().(type) {

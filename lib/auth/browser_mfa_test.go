@@ -35,17 +35,15 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	as, err := authtest.NewAuthServer(authtest.AuthServerConfig{
-		Dir: t.TempDir(),
+	testServer, err := authtest.NewTestServer(authtest.ServerConfig{
+		Auth: authtest.AuthServerConfig{
+			Dir: t.TempDir(),
+		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, as.Close()) })
+	t.Cleanup(func() { assert.NoError(t, testServer.Close()) })
 
-	srv, err := as.NewTestTLSServer()
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, srv.Close()) })
-
-	a := srv.Auth()
+	a := testServer.Auth()
 
 	// Create a test user with password.
 	username := "test-user"
@@ -60,9 +58,8 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 		setup             func(t *testing.T)
 		browserMFAReqID   string
 		requestExtensions *mfav1.ChallengeExtensions
-		wantError         bool
 		checkError        func(t *testing.T, err error)
-		checkExtensions   func(t *testing.T, extensions *mfav1.ChallengeExtensions)
+		wantExtensions    *mfav1.ChallengeExtensions
 	}{
 		{
 			name:            "NOK invalid browser MFA request ID",
@@ -70,13 +67,12 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 			requestExtensions: &mfav1.ChallengeExtensions{
 				Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
 			},
-			wantError: true,
 			checkError: func(t *testing.T, err error) {
 				require.True(t, trace.IsAccessDenied(err), "expected access denied error, got: %v", err)
 			},
 		},
 		{
-			name: "OK browser MFA request with scope set to LOGIN",
+			name: "OK browser MFA overrides challenge extensions",
 			setup: func(t *testing.T) {
 				session := &services.SSOMFASessionData{
 					RequestID:     "test-request-1",
@@ -84,7 +80,9 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 					ConnectorID:   "Browser",
 					ConnectorType: "Browser",
 					ChallengeExtensions: &mfatypes.ChallengeExtensions{
-						Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
+						Scope:                       mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
+						AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES,
+						UserVerificationRequirement: "required",
 					},
 				}
 				err := a.UpsertSSOMFASessionData(ctx, session)
@@ -92,153 +90,30 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 			},
 			browserMFAReqID: "test-request-1",
 			requestExtensions: &mfav1.ChallengeExtensions{
-				Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_UNSPECIFIED,
-			},
-			wantError: false,
-			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Equal(t, mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN, extensions.Scope)
-			},
-		},
-		{
-			name: "OK browser MFA request with allow reuse override",
-			setup: func(t *testing.T) {
-				session := &services.SSOMFASessionData{
-					RequestID:     "test-request-2",
-					Username:      username,
-					ConnectorID:   "Browser",
-					ConnectorType: "Browser",
-					ChallengeExtensions: &mfatypes.ChallengeExtensions{
-						AllowReuse: mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES,
-					},
-				}
-				err := a.UpsertSSOMFASessionData(ctx, session)
-				require.NoError(t, err)
-			},
-			browserMFAReqID: "test-request-2",
-			requestExtensions: &mfav1.ChallengeExtensions{
-				AllowReuse: mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_NO,
-			},
-			wantError: false,
-			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Equal(t, mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES, extensions.AllowReuse)
-			},
-		},
-		{
-			name: "OK browser MFA request with user verification requirement override",
-			setup: func(t *testing.T) {
-				session := &services.SSOMFASessionData{
-					RequestID:     "test-request-3",
-					Username:      username,
-					ConnectorID:   "Browser",
-					ConnectorType: "Browser",
-					ChallengeExtensions: &mfatypes.ChallengeExtensions{
-						UserVerificationRequirement: "required",
-					},
-				}
-				err := a.UpsertSSOMFASessionData(ctx, session)
-				require.NoError(t, err)
-			},
-			browserMFAReqID: "test-request-3",
-			requestExtensions: &mfav1.ChallengeExtensions{
-				UserVerificationRequirement: "preferred",
-			},
-			wantError: false,
-			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Equal(t, "required", extensions.UserVerificationRequirement)
-			},
-		},
-		{
-			name: "OK browser MFA request with unspecified scope preserves request scope",
-			setup: func(t *testing.T) {
-				session := &services.SSOMFASessionData{
-					RequestID:     "test-request-4",
-					Username:      username,
-					ConnectorID:   "Browser",
-					ConnectorType: "Browser",
-					ChallengeExtensions: &mfatypes.ChallengeExtensions{
-						Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_UNSPECIFIED,
-					},
-				}
-				err := a.UpsertSSOMFASessionData(ctx, session)
-				require.NoError(t, err)
-			},
-			browserMFAReqID: "test-request-4",
-			requestExtensions: &mfav1.ChallengeExtensions{
-				Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
-			},
-			wantError: false,
-			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Equal(t, mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN, extensions.Scope)
-			},
-		},
-		{
-			name: "OK browser MFA request with unspecified allow reuse preserves request value",
-			setup: func(t *testing.T) {
-				session := &services.SSOMFASessionData{
-					RequestID:     "test-request-5",
-					Username:      username,
-					ConnectorID:   "Browser",
-					ConnectorType: "Browser",
-					ChallengeExtensions: &mfatypes.ChallengeExtensions{
-						AllowReuse: mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_UNSPECIFIED,
-					},
-				}
-				err := a.UpsertSSOMFASessionData(ctx, session)
-				require.NoError(t, err)
-			},
-			browserMFAReqID: "test-request-5",
-			requestExtensions: &mfav1.ChallengeExtensions{
-				AllowReuse: mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES,
-			},
-			wantError: false,
-			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Equal(t, mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_UNSPECIFIED, extensions.AllowReuse)
-			},
-		},
-		{
-			name: "OK browser MFA request with empty user verification requirement preserves request value",
-			setup: func(t *testing.T) {
-				session := &services.SSOMFASessionData{
-					RequestID:     "test-request-6",
-					Username:      username,
-					ConnectorID:   "Browser",
-					ConnectorType: "Browser",
-					ChallengeExtensions: &mfatypes.ChallengeExtensions{
-						UserVerificationRequirement: "",
-					},
-				}
-				err := a.UpsertSSOMFASessionData(ctx, session)
-				require.NoError(t, err)
-			},
-			browserMFAReqID: "test-request-6",
-			requestExtensions: &mfav1.ChallengeExtensions{
+				Scope:                       mfav1.ChallengeScope_CHALLENGE_SCOPE_UNSPECIFIED,
+				AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_NO,
 				UserVerificationRequirement: "discouraged",
 			},
-			wantError: false,
-			checkExtensions: func(t *testing.T, extensions *mfav1.ChallengeExtensions) {
-				require.Empty(t, extensions.UserVerificationRequirement)
+			wantExtensions: &mfav1.ChallengeExtensions{
+				Scope:                       mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
+				AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES,
+				UserVerificationRequirement: "required",
 			},
 		},
 		{
-			name: "NOK browser MFA request with nil challenge extensions",
+			name: "NOK nil challenge extensions",
 			setup: func(t *testing.T) {
 				session := &services.SSOMFASessionData{
-					RequestID:           "test-request-7",
+					RequestID:           "test-request-2",
 					Username:            username,
-					ConnectorID:         "test-connector",
-					ConnectorType:       "test",
+					ConnectorID:         "Browser",
+					ConnectorType:       "Browser",
 					ChallengeExtensions: nil,
 				}
 				err := a.UpsertSSOMFASessionData(ctx, session)
 				require.NoError(t, err)
 			},
-			browserMFAReqID: "test-request-7",
-			requestExtensions: &mfav1.ChallengeExtensions{
-				Scope:                       mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
-				AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_NO,
-				UserVerificationRequirement: "preferred",
-			},
-			wantError: true,
+			browserMFAReqID: "test-request-2",
 			checkError: func(t *testing.T, err error) {
 				require.True(t, trace.IsBadParameter(err), "expected bad parameter error, got: %v", err)
 			},
@@ -249,6 +124,11 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(t)
+			}
+
+			var gotExtensions *mfav1.ChallengeExtensions
+			a.BrowserMFAChallengeExtensionsObserver = func(ext *mfav1.ChallengeExtensions) {
+				gotExtensions = ext
 			}
 
 			req := &proto.CreateAuthenticateChallengeRequest{
@@ -264,19 +144,17 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 
 			challenge, err := a.CreateAuthenticateChallenge(ctx, req)
 
-			if tt.wantError {
+			if tt.checkError != nil {
 				require.Error(t, err)
-				if tt.checkError != nil {
-					tt.checkError(t, err)
-				}
+				tt.checkError(t, err)
 				return
 			}
 
 			require.NoError(t, err)
 			require.NotNil(t, challenge)
 
-			if tt.checkExtensions != nil {
-				tt.checkExtensions(t, req.ChallengeExtensions)
+			if tt.wantExtensions != nil {
+				require.Equal(t, tt.wantExtensions, gotExtensions)
 			}
 		})
 	}
