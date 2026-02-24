@@ -20,12 +20,12 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/gravitational/trace"
 
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/lib/auth/mfatypes"
 	"github.com/gravitational/teleport/lib/client/sso"
-	"github.com/gravitational/trace"
 )
 
 // BeginBrowserMFAChallenge creates a new Browser MFA auth request and session
