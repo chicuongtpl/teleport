@@ -337,7 +337,7 @@ func InitCLIParser(appName, appHelp string) (app *kingpin.Application) {
 	app.HelpFlag.NoEnvar()
 
 	// set our own help template
-	return app.UsageTemplate(createUsageTemplate())
+	return app.UsageTemplate(defaultUsageTemplate)
 }
 
 // InitHiddenCLIParser initializes a `kingpin.Application` that does not terminate the application
@@ -350,18 +350,6 @@ func InitHiddenCLIParser() (app *kingpin.Application) {
 	app.Terminate(func(i int) {})
 
 	return app
-}
-
-// createUsageTemplate creates an usage template for kingpin applications.
-func createUsageTemplate(opts ...func(*usageTemplateOptions)) string {
-	opt := &usageTemplateOptions{
-		commandPrintfWidth: defaultCommandPrintfWidth,
-	}
-
-	for _, optFunc := range opts {
-		optFunc(opt)
-	}
-	return fmt.Sprintf(defaultUsageTemplate, opt.commandPrintfWidth)
 }
 
 // SplitIdentifiers splits list of identifiers by commas/spaces/newlines.  Helpful when
@@ -454,9 +442,17 @@ const defaultUsageTemplate = `{{define "FormatCommand" -}}
 {{end -}}
 
 {{define "FormatCommands" -}}
+
+{{- $maxCommandLength := 12 -}}
+{{- range .FlattenedCommands -}}
+	{{- if (gt (.FullCommand | len) $maxCommandLength) -}}
+	{{- $maxCommandLength = (.FullCommand | len) }}
+	{{- end -}}
+{{- end -}}
+
 {{range .FlattenedCommands -}}
 {{if not .Hidden -}}
-{{"  "}}{{.FullCommand | printf "%%-%ds"}}{{if .Default}} (Default){{end}} {{ .Help }}
+{{"  "}}{{printf (printf "%%-%ds" $maxCommandLength) .FullCommand}}{{if .Default}} (Default){{end}} {{ .Help }}
 {{end -}}
 {{end -}}
 {{end -}}
