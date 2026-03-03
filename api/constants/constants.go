@@ -68,7 +68,7 @@ const (
 	Github = "github"
 
 	// Browser means authentication will happen in a browser for MFA.
-	Browser = "browser"
+	BrowserMFA = "browser_mfa"
 
 	// HumanDateFormatSeconds is a human readable date formatting with seconds
 	HumanDateFormatSeconds = "Jan 2 2006 15:04:05 UTC"
