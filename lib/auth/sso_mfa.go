@@ -73,7 +73,17 @@ func (a *Server) BeginSSOMFAChallenge(ctx context.Context, params mfatypes.Begin
 		return nil, trace.BadParameter("unsupported sso connector type %v", params.SSO.ConnectorType)
 	}
 
-	if err := a.upsertSSOMFASession(ctx, params.User, chal.RequestId, params.SSO.ConnectorId, params.SSO.ConnectorType, "" /* unused clientRedirectUrl */, params.Ext, params.SIP, params.SourceCluster, params.TargetCluster); err != nil {
+	if err := a.upsertMFASession(ctx, upsertMFASessionParams{
+		user:              params.User,
+		sessionID:         chal.RequestId,
+		connectorID:       params.SSO.ConnectorId,
+		connectorType:     params.SSO.ConnectorType,
+		clientRedirectURL: "", // Only used by Browser MFA
+		ext:               params.Ext,
+		sip:               params.SIP,
+		sourceCluster:     params.SourceCluster,
+		targetCluster:     params.TargetCluster,
+	}); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
@@ -147,26 +157,40 @@ func (a *Server) VerifySSOMFASession(ctx context.Context, username, sessionID, t
 	}, nil
 }
 
-// upsertSSOMFASession upserts a new unverified SSO MFA session for the given username,
-// sessionID, connector details, and challenge extensions.
-func (a *Server) upsertSSOMFASession(ctx context.Context, user, sessionID, connectorID, connectorType, clientRedirectURL string, ext *mfav1.ChallengeExtensions, sip *mfav1.SessionIdentifyingPayload, sourceCluster string, targetCluster string) error {
+// upsertMFASessionParams are the parameters for upsertMFASession.
+type upsertMFASessionParams struct {
+	user              string
+	sessionID         string
+	connectorID       string
+	connectorType     string
+	clientRedirectURL string
+	ext               *mfav1.ChallengeExtensions
+	sip               *mfav1.SessionIdentifyingPayload
+	sourceCluster     string
+	targetCluster     string
+}
+
+// upsertMFASession upserts a new unverified MFA session for the given username,
+// sessionID, connector details, and challenge extensions. This is used by both
+// SSO MFA and Browser MFA.
+func (a *Server) upsertMFASession(ctx context.Context, params upsertMFASessionParams) error {
 	data := &services.SSOMFASessionData{
-		Username:          user,
-		RequestID:         sessionID,
-		ConnectorID:       connectorID,
-		ConnectorType:     connectorType,
-		ClientRedirectURL: clientRedirectURL,
+		Username:          params.user,
+		RequestID:         params.sessionID,
+		ConnectorID:       params.connectorID,
+		ConnectorType:     params.connectorType,
+		ClientRedirectURL: params.clientRedirectURL,
 		ChallengeExtensions: &mfatypes.ChallengeExtensions{
-			Scope:      ext.Scope,
-			AllowReuse: ext.AllowReuse,
+			Scope:      params.ext.Scope,
+			AllowReuse: params.ext.AllowReuse,
 		},
-		SourceCluster: sourceCluster,
-		TargetCluster: targetCluster,
+		SourceCluster: params.sourceCluster,
+		TargetCluster: params.targetCluster,
 	}
 
-	if sip != nil {
+	if params.sip != nil {
 		data.Payload = &mfatypes.SessionIdentifyingPayload{
-			SSHSessionID: sip.GetSshSessionId(),
+			SSHSessionID: params.sip.GetSshSessionId(),
 		}
 	}
 
