@@ -163,35 +163,35 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 
 	// Create pipes to capture stdio of the shell (grandchild) process, closing our
 	// side of each pipe after starting the command.
-	shellStdinr, shellStdinw, err := os.Pipe()
+	shellStdinR, shellStdinW, err := os.Pipe()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	defer shellStdinr.Close()
-	e.Ctx.AddCloser(shellStdinw)
+	defer shellStdinR.Close()
+	e.Ctx.AddCloser(shellStdinW)
 
-	shellStdoutr, shellStdoutw, err := os.Pipe()
+	shellStdoutR, shellStdoutW, err := os.Pipe()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	defer shellStdoutw.Close()
-	e.Ctx.AddCloser(shellStdoutr)
+	defer shellStdoutW.Close()
+	e.Ctx.AddCloser(shellStdoutR)
 
-	shellStderrr, shellStderrw, err := os.Pipe()
+	shellStderrR, shellStderrW, err := os.Pipe()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	defer shellStderrw.Close()
-	e.Ctx.AddCloser(shellStderrr)
+	defer shellStderrW.Close()
+	e.Ctx.AddCloser(shellStderrR)
 
 	// Create the command that will actually execute.
-	e.Cmd, err = ConfigureCommand(e.Ctx, shellStdinr, shellStdoutw, shellStderrw)
+	e.Cmd, err = ConfigureCommand(e.Ctx, shellStdinR, shellStdoutW, shellStderrW)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	// Capture stderr.
-	stderrr, stderrw, err := os.Pipe()
+	stderrR, stderrw, err := os.Pipe()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -201,9 +201,9 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 	e.childStderrDone = make(chan struct{})
 	go func() {
 		defer close(e.childStderrDone)
-		defer stderrr.Close()
+		defer stderrR.Close()
 
-		childErr, err := reexec.ReadChildError(stderrr)
+		childErr, err := reexec.ReadChildError(stderrR)
 		if err != nil {
 			logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
 		} else if childErr != "" {
@@ -239,18 +239,18 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 
 	// copy stdio between the channel and shell process.
 	go func() {
-		if _, err := io.Copy(shellStdinw, channel); err != nil {
+		if _, err := io.Copy(shellStdinW, channel); err != nil {
 			logger.WarnContext(ctx, "Failed to forward stdin from SSH channel to local command", "error", err)
 		}
-		shellStdinw.Close()
+		shellStdinW.Close()
 	}()
 	go func() {
-		if _, err := io.Copy(channel, shellStdoutr); err != nil {
+		if _, err := io.Copy(channel, shellStdoutR); err != nil {
 			logger.WarnContext(ctx, "Failed to forward stdout from local command to SSH channel", "error", err)
 		}
 	}()
 	go func() {
-		if _, err := io.Copy(channel.Stderr(), shellStderrr); err != nil {
+		if _, err := io.Copy(channel.Stderr(), shellStderrR); err != nil {
 			logger.WarnContext(ctx, "Failed to forward stderr from local command to SSH channel", "error", err)
 		}
 	}()

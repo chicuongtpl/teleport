@@ -225,19 +225,19 @@ func (t *terminal) Run(ctx context.Context) error {
 	t.cmd.ExtraFiles = append(t.cmd.ExtraFiles, tty)
 
 	// Capture stderr.
-	stderrr, stderrw, err := os.Pipe()
+	stderrR, stderrW, err := os.Pipe()
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	defer stderrw.Close()
-	t.cmd.Stderr = stderrw
+	defer stderrW.Close()
+	t.cmd.Stderr = stderrW
 
 	t.childStderrDone = make(chan struct{})
 	go func() {
 		defer close(t.childStderrDone)
-		defer stderrr.Close()
+		defer stderrR.Close()
 
-		childErr, err := reexec.ReadChildError(stderrr)
+		childErr, err := reexec.ReadChildError(stderrR)
 		if err != nil {
 			t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
 		} else if childErr != "" {
