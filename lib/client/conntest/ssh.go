@@ -182,7 +182,7 @@ func (s *SSHConnectionTester) TestConnection(ctx context.Context, req TestConnec
 		ClusterName: clusterName.GetClusterName(),
 	}
 
-	processStderr := &bytes.Buffer{}
+	processStderr := new(bytes.Buffer)
 
 	clientConf := &client.Config{}
 	clientConf.AddKeysToAgent = client.AddKeysToAgentNo
@@ -268,7 +268,7 @@ func (s SSHConnectionTester) handleErrFromSSH(ctx context.Context, connectionDia
 	// Connect My Computer runs the agent as non-root. When attempting to connect as another system
 	// user that is not the same as the user who runs the agent, the emitted error is "Failed to
 	// launch: fork/exec <conn.User shell>: operation not permitted."
-	isForkExecOperationNotPermitted := strings.Contains(processStderrString, "Failed to launch: fork/exec") &&
+	isForkExecOperationNotPermitted := strings.HasPrefix(processStderrString, "Failed to launch: fork/exec") &&
 		strings.Contains(processStderrString, "operation not permitted")
 	// "operation not permitted" is handled only for the Connect My Computer case as we assume that
 	// regular SSH nodes are started as root and are unlikely to run into this error.
