@@ -130,7 +130,7 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 				Request: &proto.CreateAuthenticateChallengeRequest_UserCredentials{
 					UserCredentials: &proto.UserCredentials{
 						Username: userCreds.username,
-						Password: []byte(userCreds.password),
+						Password: userCreds.password,
 					},
 				},
 				BrowserMFARequestID: tt.browserMFAReqID,
