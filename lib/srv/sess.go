@@ -2226,13 +2226,18 @@ type sessionStderrWriter struct {
 }
 
 func (w *sessionStderrWriter) Write(p []byte) (n int, err error) {
+	var wg sync.WaitGroup
 	// Stderr is low-volume and failure path oriented, so this uses simple,
 	// best-effort fanout instead of TermManager style buffering/failover.
 	for _, party := range w.session.getParties() {
-		if _, writeErr := party.ch.Stderr().Write(p); writeErr != nil {
-			w.session.logger.WarnContext(w.session.serverCtx, "Failed writing to stderr of SSH channel", "error", writeErr)
-		}
+		// Write to parties in goroutines to ensure we don't favor the first (potentially slow) parties.
+		wg.Go(func() {
+			if _, writeErr := party.ch.Stderr().Write(p); writeErr != nil {
+				w.session.logger.WarnContext(w.session.serverCtx, "Failed writing to stderr of SSH channel", "error", writeErr)
+			}
+		})
 	}
+	wg.Wait()
 	return len(p), nil
 }
 

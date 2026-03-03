@@ -274,7 +274,15 @@ func (t *terminal) Run(ctx context.Context) error {
 // Wait will block until the terminal is complete.
 func (t *terminal) Wait() (*ExecResult, error) {
 	err := t.cmd.Wait()
-	<-t.childStderrDone
+
+	// Wait a moment for the session stderr to propagate to connected parties. In the case of
+	// one or more parties being slow/blocking the stderr write, ensure the session still ends promptly.
+	select {
+	case <-t.childStderrDone:
+	case <-time.After(time.Second):
+		t.log.WarnContext(t.serverContext.cancelContext, "Failed to propagate child process stderr to client before ending the session")
+	}
+
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
