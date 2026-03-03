@@ -29,7 +29,7 @@ import (
 )
 
 // BeginBrowserMFAChallenge creates a new Browser MFA auth request and session
-// data for the given user stored in an SSO MFA record
+// data for the given which is stored in the backend.
 func (a *Server) BeginBrowserMFAChallenge(ctx context.Context, params mfatypes.BeginBrowserMFAChallengeParams) (*proto.BrowserMFAChallenge, error) {
 	if err := sso.ValidateClientRedirect(params.BrowserMFATSHRedirectURL, sso.CeremonyTypeMFA, nil); err != nil {
 		return nil, trace.Wrap(err, InvalidClientRedirectErrorMessage)
