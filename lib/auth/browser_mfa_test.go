@@ -226,8 +226,8 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 				assert.Equal(t, &services.SSOMFASessionData{
 					RequestID:         chal.BrowserMFAChallenge.RequestId,
 					Username:          env.webauthnUser.GetName(),
-					ConnectorID:       constants.Browser,
-					ConnectorType:     constants.Browser,
+					ConnectorID:       constants.BrowserMFA,
+					ConnectorType:     constants.BrowserMFA,
 					ClientRedirectURL: redirectURL,
 					ChallengeExtensions: &mfatypes.ChallengeExtensions{
 						Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
@@ -307,8 +307,8 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 			sd: &services.SSOMFASessionData{
 				RequestID:         "request1",
 				Username:          env.webauthnUser.GetName(),
-				ConnectorID:       constants.Browser,
-				ConnectorType:     constants.Browser,
+				ConnectorID:       constants.BrowserMFA,
+				ConnectorType:     constants.BrowserMFA,
 				ClientRedirectURL: redirectURL,
 				ChallengeExtensions: &mfatypes.ChallengeExtensions{
 					Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
@@ -319,8 +319,8 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 				require.NotNil(t, sd)
 				assert.Equal(t, "request1", sd.RequestID)
 				assert.Equal(t, env.webauthnUser.GetName(), sd.Username)
-				assert.Equal(t, constants.Browser, sd.ConnectorID)
-				assert.Equal(t, constants.Browser, sd.ConnectorType)
+				assert.Equal(t, constants.BrowserMFA, sd.ConnectorID)
+				assert.Equal(t, constants.BrowserMFA, sd.ConnectorType)
 				assert.Equal(t, redirectURL, sd.ClientRedirectURL)
 				assert.Equal(t, mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN, sd.ChallengeExtensions.Scope)
 			},
@@ -330,8 +330,8 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 			sd: &services.SSOMFASessionData{
 				RequestID:         "request2",
 				Username:          env.webauthnUser.GetName(),
-				ConnectorID:       constants.Browser,
-				ConnectorType:     constants.Browser,
+				ConnectorID:       constants.BrowserMFA,
+				ConnectorType:     constants.BrowserMFA,
 				ClientRedirectURL: redirectURL,
 				ChallengeExtensions: &mfatypes.ChallengeExtensions{
 					Scope:      mfav1.ChallengeScope_CHALLENGE_SCOPE_USER_SESSION,
@@ -349,8 +349,8 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 			sd: &services.SSOMFASessionData{
 				RequestID:         "request3",
 				Username:          env.webauthnUser.GetName(),
-				ConnectorID:       constants.Browser,
-				ConnectorType:     constants.Browser,
+				ConnectorID:       constants.BrowserMFA,
+				ConnectorType:     constants.BrowserMFA,
 				ClientRedirectURL: redirectURL,
 				ChallengeExtensions: &mfatypes.ChallengeExtensions{
 					Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_ADMIN_ACTION,
