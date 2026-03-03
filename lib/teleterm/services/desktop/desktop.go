@@ -161,6 +161,7 @@ func (s *Session) Start(ctx context.Context, stream grpc.BidiStreamingServer[api
 	if serverProtocol == tdpb.ProtocolName {
 		// Use TDPB decoder
 		tdpServerConn = tdp.NewConn(conn, tdp.DecoderAdapter(tdpb.DecodePermissive))
+		defer tdpServerConn.Close()
 		// Send the client hello
 		if err := tdpServerConn.WriteMessage(hello); err != nil {
 			return trace.Wrap(err)
