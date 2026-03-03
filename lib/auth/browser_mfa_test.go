@@ -150,7 +150,8 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 		username         string
 		setup            func(t *testing.T)
 		challengeRequest *proto.CreateAuthenticateChallengeRequest
-		assertChallenge  func(t *testing.T, chal *proto.MFAAuthenticateChallenge, err error)
+		checkError       func(t *testing.T, err error)
+		assertChallenge  func(t *testing.T, chal *proto.MFAAuthenticateChallenge)
 	}{
 		{
 			name:     "NOK user without WebAuthn devices",
@@ -159,8 +160,7 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 				ChallengeExtensions:      loginExt,
 				BrowserMFATSHRedirectURL: redirectURL,
 			},
-			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge, err error) {
-				require.NoError(t, err)
+			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge) {
 				assert.Nil(t, chal.BrowserMFAChallenge, "should not return Browser MFA challenge for user without WebAuthn devices")
 			},
 		},
@@ -171,8 +171,7 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 				ChallengeExtensions:      loginExt,
 				BrowserMFATSHRedirectURL: "",
 			},
-			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge, err error) {
-				require.NoError(t, err)
+			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge) {
 				assert.Nil(t, chal.BrowserMFAChallenge, "should not return Browser MFA challenge when BrowserMFATSHRedirectURL is empty")
 			},
 		},
@@ -194,8 +193,7 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 					assert.NoError(t, err)
 				})
 			},
-			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge, err error) {
-				require.NoError(t, err)
+			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge) {
 				assert.Nil(t, chal.BrowserMFAChallenge, "should not return Browser MFA challenge when AllowBrowserAuthentication is false")
 			},
 		},
@@ -206,8 +204,7 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 				ChallengeExtensions:      loginExt,
 				BrowserMFATSHRedirectURL: redirectURL,
 			},
-			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge, err error) {
-				require.NoError(t, err)
+			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge) {
 				assert.Nil(t, chal.BrowserMFAChallenge, "SSO users should not get Browser MFA challenge")
 			},
 		},
@@ -218,8 +215,7 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 				ChallengeExtensions:      loginExt,
 				BrowserMFATSHRedirectURL: redirectURL,
 			},
-			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge, err error) {
-				require.NoError(t, err)
+			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge) {
 				require.NotNil(t, chal.BrowserMFAChallenge, "expected Browser MFA challenge to be returned")
 				assert.NotEmpty(t, chal.BrowserMFAChallenge.RequestId, "request ID should be generated")
 
@@ -249,8 +245,7 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 				},
 				BrowserMFATSHRedirectURL: redirectURL,
 			},
-			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge, err error) {
-				require.NoError(t, err)
+			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge) {
 				require.NotNil(t, chal.BrowserMFAChallenge, "expected Browser MFA challenge to be returned")
 
 				// We should find SSO MFA session data tied to the challenge by request ID.
@@ -269,7 +264,18 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 			}
 
 			chal, err := userClient.CreateAuthenticateChallenge(ctx, tt.challengeRequest)
-			tt.assertChallenge(t, chal, err)
+
+			if tt.checkError != nil {
+				require.Error(t, err)
+				tt.checkError(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, chal)
+			if tt.assertChallenge != nil {
+				tt.assertChallenge(t, chal)
+			}
 		})
 	}
 }
@@ -285,15 +291,15 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 		name             string
 		sd               *services.SSOMFASessionData
 		requestID        string
-		assertValidation func(t *testing.T, sd *services.SSOMFASessionData, err error)
+		checkError       func(t *testing.T, err error)
+		assertValidation func(t *testing.T, sd *services.SSOMFASessionData)
 	}{
 		{
 			name:      "NOK session data not found",
 			sd:        nil,
 			requestID: "nonexistent-request",
-			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData, err error) {
+			checkError: func(t *testing.T, err error) {
 				require.Error(t, err, "should fail when session data not found")
-				assert.Nil(t, sd)
 			},
 		},
 		{
@@ -309,8 +315,7 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 				},
 			},
 			requestID: "request1",
-			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData, err error) {
-				require.NoError(t, err)
+			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData) {
 				require.NotNil(t, sd)
 				assert.Equal(t, "request1", sd.RequestID)
 				assert.Equal(t, env.webauthnUser.GetName(), sd.Username)
@@ -334,8 +339,7 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 				},
 			},
 			requestID: "request2",
-			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData, err error) {
-				require.NoError(t, err)
+			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData) {
 				require.NotNil(t, sd)
 				assert.Equal(t, mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES, sd.ChallengeExtensions.AllowReuse)
 			},
@@ -353,8 +357,7 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 				},
 			},
 			requestID: "request3",
-			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData, err error) {
-				require.NoError(t, err)
+			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData) {
 				require.NotNil(t, sd)
 				assert.Equal(t, mfav1.ChallengeScope_CHALLENGE_SCOPE_ADMIN_ACTION, sd.ChallengeExtensions.Scope)
 			},
@@ -367,7 +370,17 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 			}
 
 			sd, err := a.GetSSOMFASessionData(ctx, tt.requestID)
-			tt.assertValidation(t, sd, err)
+
+			if tt.checkError != nil {
+				require.Error(t, err)
+				tt.checkError(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			if tt.assertValidation != nil {
+				tt.assertValidation(t, sd)
+			}
 		})
 	}
 }
