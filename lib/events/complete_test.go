@@ -19,11 +19,13 @@
 package events_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -365,6 +367,115 @@ func TestCheckUploadsContinuesOnError(t *testing.T) {
 	clock.Advance(1 * time.Hour)
 	uc.CheckUploads(context.Background())
 	require.ElementsMatch(t, completedUploads, []session.ID{session.ID(sessionTrackers[1].GetSessionID())})
+}
+
+func TestUploadCompleterMergesRecordings(t *testing.T) {
+	t.Parallel()
+	mkEvent := func(index int64, data string) apievents.AuditEvent {
+		return &apievents.SessionPrint{
+			Metadata: apievents.Metadata{
+				Index: index,
+			},
+			Data: []byte(data),
+		}
+	}
+	synctest.Test(t, func(t *testing.T) {
+		mu := eventstest.NewMemoryUploader()
+		log := &eventstest.MockAuditLog{
+			Emitter: &eventstest.MockRecorderEmitter{},
+		}
+		const checkPeriod = time.Minute
+		const gracePeriod = 2 * time.Minute
+		err := events.StartNewUploadCompleter(t.Context(), events.UploadCompleterConfig{
+			Uploader:       mu,
+			AuditLog:       log,
+			SessionTracker: &mockSessionTrackerService{},
+			ClusterName:    "teleport-cluster",
+			GracePeriod:    gracePeriod,
+			CheckPeriod:    checkPeriod,
+		})
+		require.NoError(t, err)
+
+		streamer, err := events.NewProtoStreamer(events.ProtoStreamerConfig{
+			Uploader:       mu,
+			MinUploadBytes: events.MinUploadPartSizeBytes,
+		})
+		require.NoError(t, err)
+		sessionID := session.NewID()
+		downloadEvents := func(uploadID string) []apievents.AuditEvent {
+			buf := &events.MemBuffer{}
+			require.NoError(t, mu.Download(t.Context(), sessionID, uploadID, buf))
+			recording, err := events.NewProtoReader(bytes.NewReader(buf.Bytes()), nil).ReadAll(t.Context())
+			require.NoError(t, err)
+			return recording
+		}
+		sessionEvents := []apievents.AuditEvent{
+			&apievents.SessionStart{
+				Metadata: apievents.Metadata{
+					Index: 0,
+				},
+			},
+			mkEvent(1, "a"),
+			mkEvent(2, "b"),
+			mkEvent(3, "c"),
+			mkEvent(4, "d"),
+			mkEvent(5, "e"),
+			&apievents.SessionEnd{
+				Metadata: apievents.Metadata{
+					Index: 6,
+				},
+			},
+		}
+		prep := &events.NoOpPreparer{}
+		// Start event upload.
+		firstStream, err := streamer.CreateAuditStream(t.Context(), sessionID)
+		require.NoError(t, err)
+		status := <-firstStream.Status()
+		require.NotNil(t, status)
+		firstUploadID := status.UploadID
+
+		// Upload some events, then abandon the stream.
+		for _, event := range sessionEvents[:4] {
+			preparedEvent, _ := prep.PrepareSessionEvent(event)
+			require.NoError(t, firstStream.RecordEvent(t.Context(), preparedEvent))
+		}
+		require.NoError(t, firstStream.Close(t.Context()))
+
+		time.Sleep(gracePeriod + checkPeriod)
+		synctest.Wait()
+		require.True(t, mu.RecordingExists(t.Context(), sessionID, ""))
+		require.False(t, mu.RecordingExists(t.Context(), sessionID, firstUploadID))
+		firstRecording := downloadEvents("")
+		require.Equal(t, sessionEvents[:4], firstRecording)
+		log.SessionEvents = sessionEvents[:4]
+
+		secondStream, err := streamer.ResumeAuditStream(t.Context(), sessionID, firstUploadID)
+		require.NoError(t, err)
+		status = <-secondStream.Status()
+		secondUploadID := status.UploadID
+
+		// Upload remaining events.
+		for _, event := range sessionEvents[4:] {
+			preparedEvent, _ := prep.PrepareSessionEvent(event)
+			require.NoError(t, secondStream.RecordEvent(t.Context(), preparedEvent))
+		}
+		require.NoError(t, secondStream.Complete(t.Context()))
+
+		synctest.Wait()
+		require.False(t, mu.RecordingExists(t.Context(), sessionID, firstUploadID))
+		require.True(t, mu.RecordingExists(t.Context(), sessionID, secondUploadID))
+		secondRecording := downloadEvents(secondUploadID)
+		require.Equal(t, sessionEvents[4:], secondRecording)
+		log.TempSessionEvents = sessionEvents[4:]
+		// Final recording should be unchanged for now.
+		firstRecording = downloadEvents("")
+		require.Equal(t, sessionEvents[:4], firstRecording)
+
+		time.Sleep(checkPeriod)
+		synctest.Wait()
+		finalRecording := downloadEvents("")
+		require.Equal(t, sessionEvents, finalRecording)
+	})
 }
 
 type mockSessionTrackerService struct {

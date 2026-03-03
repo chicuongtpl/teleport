@@ -857,6 +857,9 @@ func (w *sliceWriter) completeStream() {
 			slog.WarnContext(w.proto.cancelCtx, "Failed to complete upload", "error", err)
 			return
 		}
+		if w.proto.cfg.Upload.Temporary {
+			return
+		}
 
 		if w.proto.cfg.RecordingMetadataProvider != nil {
 			recordingMetadata := w.proto.cfg.RecordingMetadataProvider.Service()

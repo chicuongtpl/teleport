@@ -21,6 +21,7 @@ package filesessions
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -133,6 +134,9 @@ func (h *Handler) CreateUpload(ctx context.Context, sessionID session.ID, tempor
 	}
 
 	if err := os.MkdirAll(h.uploadPath(upload), teleport.PrivateDirMode); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	if err := h.writeMetadata(upload); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
@@ -349,26 +353,38 @@ func (h *Handler) ListUploads(ctx context.Context) ([]events.StreamUpload, error
 			return nil, trace.Wrap(err)
 		}
 		// expect just one subdirectory - session ID
-		if len(files) != 1 {
-			h.logger.WarnContext(ctx, "Skipping upload, missing subdirectory.", "upload_id", uploadID)
+		if len(files) != 2 {
+			h.logger.WarnContext(ctx, "Skipping upload, missing subdirectory or metadata file.", "upload_id", uploadID)
 			continue
 		}
-		if !files[0].IsDir() {
-			h.logger.WarnContext(ctx, "Skipping upload, not a directory.", "upload_id", uploadID)
-			continue
-		}
-
 		info, err := dir.Info()
 		if err != nil {
 			h.logger.WarnContext(ctx, "Skipping upload: cannot read file info", "upload_id", uploadID, "error", err)
 			continue
 		}
 
-		uploads = append(uploads, events.StreamUpload{
-			SessionID: session.ID(filepath.Base(files[0].Name())),
-			ID:        uploadID,
-			Initiated: info.ModTime(),
-		})
+		upload, err := h.readMetadata(uploadID)
+		if err != nil {
+			// Look for session dir manually for backwards compatibility.
+			var sessionDir os.DirEntry
+			for _, ent := range files {
+				if ent.IsDir() {
+					sessionDir = ent
+					break
+				}
+			}
+			if sessionDir == nil {
+				h.logger.WarnContext(ctx, "Skipping upload, missing subdirectory.", "upload_id", uploadID)
+				continue
+			}
+
+			upload = events.StreamUpload{
+				SessionID: session.ID(filepath.Base(sessionDir.Name())),
+				ID:        uploadID,
+			}
+		}
+		upload.Initiated = info.ModTime()
+		uploads = append(uploads, upload)
 	}
 
 	sort.Slice(uploads, func(i, j int) bool {
@@ -414,6 +430,30 @@ func (h *Handler) partPath(upload events.StreamUpload, partNumber int64) string 
 
 func (h *Handler) reservationPath(upload events.StreamUpload, partNumber int64) string {
 	return filepath.Join(h.uploadPath(upload), reservationFileName(partNumber))
+}
+
+func (h *Handler) uploadMetadataPath(upload events.StreamUpload) string {
+	return filepath.Join(h.uploadRootPath(upload), "metadata.json")
+}
+
+func (h *Handler) writeMetadata(upload events.StreamUpload) error {
+	data, err := json.Marshal(upload)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return trace.ConvertSystemError(os.WriteFile(h.uploadMetadataPath(upload), data, teleport.PrivateDirMode))
+}
+
+func (h *Handler) readMetadata(uploadID string) (events.StreamUpload, error) {
+	data, err := os.ReadFile(h.uploadMetadataPath(events.StreamUpload{ID: uploadID}))
+	if err != nil {
+		return events.StreamUpload{}, trace.ConvertSystemError(err)
+	}
+	var upload events.StreamUpload
+	if err := json.Unmarshal(data, &upload); err != nil {
+		return events.StreamUpload{}, trace.Wrap(err)
+	}
+	return upload, nil
 }
 
 func partFileName(partNumber int64) string {

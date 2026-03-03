@@ -218,11 +218,15 @@ func (m *MemoryUploader) ListUploads(ctx context.Context) ([]events.StreamUpload
 	defer m.mtx.RUnlock()
 	uploads := make([]events.StreamUpload, 0, len(m.uploads))
 	for id, upload := range m.uploads {
-		uploads = append(uploads, events.StreamUpload{
+		up := events.StreamUpload{
 			ID:        id,
 			SessionID: upload.sessionID,
 			Initiated: upload.Initiated,
-		})
+		}
+		if m.tempSessions[id] != nil {
+			up.Temporary = true
+		}
+		uploads = append(uploads, up)
 	}
 	sort.Slice(uploads, func(i, j int) bool {
 		return uploads[i].Initiated.Before(uploads[j].Initiated)
@@ -371,7 +375,13 @@ func (m *MemoryUploader) Download(ctx context.Context, sessionID session.ID, upl
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
 
-	data, ok := m.sessions[sessionID]
+	var data []byte
+	var ok bool
+	if uploadID != "" {
+		data, ok = m.tempSessions[uploadID]
+	} else {
+		data, ok = m.sessions[sessionID]
+	}
 	if !ok {
 		return trace.NotFound("session %q is not found", sessionID)
 	}

@@ -1118,14 +1118,14 @@ type StreamPart struct {
 // StreamUpload represents stream multipart upload
 type StreamUpload struct {
 	// ID is unique upload ID
-	ID string
+	ID string `json:"id"`
 	// SessionID is a session ID of the upload
-	SessionID session.ID
+	SessionID session.ID `json:"session_id"`
 	// Initiated contains the timestamp of when the upload
 	// was initiated, not always initialized
-	Initiated time.Time
+	Initiated time.Time `json:"-"`
 
-	Temporary bool
+	Temporary bool `json:"temporary,omitempty"`
 }
 
 // String returns user friendly representation of the upload
