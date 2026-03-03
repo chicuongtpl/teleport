@@ -128,34 +128,33 @@ func (s *sftpSubsys) Start(ctx context.Context,
 	}
 
 	// Capture stderr.
-	stderrr, stderrw, err := os.Pipe()
+	stderrR, stderrW, err := os.Pipe()
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	defer stderrw.Close()
-	s.sftpCmd.Stderr = stderrw
+	defer stderrW.Close()
+	s.sftpCmd.Stderr = stderrW
 
 	s.childStderrDone = make(chan struct{})
 	go func() {
 		defer close(s.childStderrDone)
-		defer stderrr.Close()
+		defer stderrR.Close()
 
-		childErr, err := reexec.ReadChildError(stderrr, &reexec.ErrorContext{
+		childErr, err := reexec.ReadChildError(stderrR, &reexec.ErrorContext{
 			DecisionContext: s.serverCtx.Identity.AccessPermit.DecisionContext,
 			Login:           s.serverCtx.Identity.Login,
 		})
 		if err != nil {
 			s.serverCtx.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
-		} else if childErr != nil {
-			errMsg := childErr.Error() + "\n"
-			if _, err := io.WriteString(ch.Stderr(), errMsg); err != nil {
+		} else if childErr != "" {
+			if _, err := io.WriteString(ch.Stderr(), childErr); err != nil {
 				s.serverCtx.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
 			}
 		}
 	}()
 
-	// Ensure stderrr pipe is closed.
-	serverCtx.AddCloser(stderrr)
+	// Ensure stderrR pipe is closed.
+	serverCtx.AddCloser(stderrR)
 
 	s.logger.DebugContext(ctx, "starting SFTP process")
 	err = s.sftpCmd.Start()
