@@ -49,15 +49,15 @@ func (a *Server) BeginBrowserMFAChallenge(ctx context.Context, params mfatypes.B
 	}
 
 	if err := a.upsertMFASession(ctx, upsertMFASessionParams{
-		user:              params.User,
-		sessionID:         requestID,
-		connectorID:       constants.BrowserMFA,
-		connectorType:     constants.BrowserMFA,
-		clientRedirectURL: params.BrowserMFATSHRedirectURL,
-		ext:               params.Ext,
-		sip:               params.SIP,
-		sourceCluster:     params.SourceCluster,
-		targetCluster:     params.TargetCluster,
+		user:           params.User,
+		sessionID:      requestID,
+		connectorID:    constants.BrowserMFA,
+		connectorType:  constants.BrowserMFA,
+		tshRedirectURL: params.BrowserMFATSHRedirectURL,
+		ext:            params.Ext,
+		sip:            params.SIP,
+		sourceCluster:  params.SourceCluster,
+		targetCluster:  params.TargetCluster,
 	}); err != nil {
 		return nil, trace.Wrap(err)
 	}

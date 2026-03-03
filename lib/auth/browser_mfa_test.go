@@ -224,11 +224,11 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 				sd, err := a.GetSSOMFASessionData(ctx, chal.BrowserMFAChallenge.RequestId)
 				require.NoError(t, err)
 				assert.Equal(t, &services.SSOMFASessionData{
-					RequestID:         chal.BrowserMFAChallenge.RequestId,
-					Username:          env.webauthnUser.GetName(),
-					ConnectorID:       constants.BrowserMFA,
-					ConnectorType:     constants.BrowserMFA,
-					ClientRedirectURL: redirectURL,
+					RequestID:      chal.BrowserMFAChallenge.RequestId,
+					Username:       env.webauthnUser.GetName(),
+					ConnectorID:    constants.BrowserMFA,
+					ConnectorType:  constants.BrowserMFA,
+					TshRedirectURL: redirectURL,
 					ChallengeExtensions: &mfatypes.ChallengeExtensions{
 						Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
 					},
@@ -305,11 +305,11 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 		{
 			name: "OK session data retrieved correctly",
 			sd: &services.SSOMFASessionData{
-				RequestID:         "request1",
-				Username:          env.webauthnUser.GetName(),
-				ConnectorID:       constants.BrowserMFA,
-				ConnectorType:     constants.BrowserMFA,
-				ClientRedirectURL: redirectURL,
+				RequestID:      "request1",
+				Username:       env.webauthnUser.GetName(),
+				ConnectorID:    constants.BrowserMFA,
+				ConnectorType:  constants.BrowserMFA,
+				TshRedirectURL: redirectURL,
 				ChallengeExtensions: &mfatypes.ChallengeExtensions{
 					Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
 				},
@@ -321,18 +321,18 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 				assert.Equal(t, env.webauthnUser.GetName(), sd.Username)
 				assert.Equal(t, constants.BrowserMFA, sd.ConnectorID)
 				assert.Equal(t, constants.BrowserMFA, sd.ConnectorType)
-				assert.Equal(t, redirectURL, sd.ClientRedirectURL)
+				assert.Equal(t, redirectURL, sd.TshRedirectURL)
 				assert.Equal(t, mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN, sd.ChallengeExtensions.Scope)
 			},
 		},
 		{
 			name: "OK session data with allow reuse",
 			sd: &services.SSOMFASessionData{
-				RequestID:         "request2",
-				Username:          env.webauthnUser.GetName(),
-				ConnectorID:       constants.BrowserMFA,
-				ConnectorType:     constants.BrowserMFA,
-				ClientRedirectURL: redirectURL,
+				RequestID:      "request2",
+				Username:       env.webauthnUser.GetName(),
+				ConnectorID:    constants.BrowserMFA,
+				ConnectorType:  constants.BrowserMFA,
+				TshRedirectURL: redirectURL,
 				ChallengeExtensions: &mfatypes.ChallengeExtensions{
 					Scope:      mfav1.ChallengeScope_CHALLENGE_SCOPE_USER_SESSION,
 					AllowReuse: mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES,
@@ -347,11 +347,11 @@ func TestBrowserMFAChallenge_Validation(t *testing.T) {
 		{
 			name: "OK session data with admin action scope",
 			sd: &services.SSOMFASessionData{
-				RequestID:         "request3",
-				Username:          env.webauthnUser.GetName(),
-				ConnectorID:       constants.BrowserMFA,
-				ConnectorType:     constants.BrowserMFA,
-				ClientRedirectURL: redirectURL,
+				RequestID:      "request3",
+				Username:       env.webauthnUser.GetName(),
+				ConnectorID:    constants.BrowserMFA,
+				ConnectorType:  constants.BrowserMFA,
+				TshRedirectURL: redirectURL,
 				ChallengeExtensions: &mfatypes.ChallengeExtensions{
 					Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_ADMIN_ACTION,
 				},

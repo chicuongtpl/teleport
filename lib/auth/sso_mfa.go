@@ -74,15 +74,15 @@ func (a *Server) BeginSSOMFAChallenge(ctx context.Context, params mfatypes.Begin
 	}
 
 	if err := a.upsertMFASession(ctx, upsertMFASessionParams{
-		user:              params.User,
-		sessionID:         chal.RequestId,
-		connectorID:       params.SSO.ConnectorId,
-		connectorType:     params.SSO.ConnectorType,
-		clientRedirectURL: "", // Only used by Browser MFA
-		ext:               params.Ext,
-		sip:               params.SIP,
-		sourceCluster:     params.SourceCluster,
-		targetCluster:     params.TargetCluster,
+		user:           params.User,
+		sessionID:      chal.RequestId,
+		connectorID:    params.SSO.ConnectorId,
+		connectorType:  params.SSO.ConnectorType,
+		tshRedirectURL: "", // Only used by Browser MFA
+		ext:            params.Ext,
+		sip:            params.SIP,
+		sourceCluster:  params.SourceCluster,
+		targetCluster:  params.TargetCluster,
 	}); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -159,15 +159,15 @@ func (a *Server) VerifySSOMFASession(ctx context.Context, username, sessionID, t
 
 // upsertMFASessionParams are the parameters for upsertMFASession.
 type upsertMFASessionParams struct {
-	user              string
-	sessionID         string
-	connectorID       string
-	connectorType     string
-	clientRedirectURL string
-	ext               *mfav1.ChallengeExtensions
-	sip               *mfav1.SessionIdentifyingPayload
-	sourceCluster     string
-	targetCluster     string
+	user           string
+	sessionID      string
+	connectorID    string
+	connectorType  string
+	tshRedirectURL string
+	ext            *mfav1.ChallengeExtensions
+	sip            *mfav1.SessionIdentifyingPayload
+	sourceCluster  string
+	targetCluster  string
 }
 
 // upsertMFASession upserts a new unverified MFA session for the given username,
@@ -175,11 +175,11 @@ type upsertMFASessionParams struct {
 // SSO MFA and Browser MFA.
 func (a *Server) upsertMFASession(ctx context.Context, params upsertMFASessionParams) error {
 	data := &services.SSOMFASessionData{
-		Username:          params.user,
-		RequestID:         params.sessionID,
-		ConnectorID:       params.connectorID,
-		ConnectorType:     params.connectorType,
-		ClientRedirectURL: params.clientRedirectURL,
+		Username:       params.user,
+		RequestID:      params.sessionID,
+		ConnectorID:    params.connectorID,
+		ConnectorType:  params.connectorType,
+		TshRedirectURL: params.tshRedirectURL,
 		ChallengeExtensions: &mfatypes.ChallengeExtensions{
 			Scope:      params.ext.Scope,
 			AllowReuse: params.ext.AllowReuse,
