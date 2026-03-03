@@ -1308,7 +1308,7 @@ func TestVerifyValidatedMFAChallenge_WebauthnFailedStorage(t *testing.T) {
 	require.Nil(t, resp)
 }
 
-func TestValidateBrowserMFAChallenge_Success(t *testing.T) {
+func TestCompleteBrowserMFAChallenge_Success(t *testing.T) {
 	t.Parallel()
 
 	authServer, service, _, _ := setupAuthServer(t, nil)
@@ -1319,9 +1319,9 @@ func TestValidateBrowserMFAChallenge_Success(t *testing.T) {
 
 	ctx := authz.ContextWithUser(t.Context(), authtest.TestBuiltin(types.RoleProxy).I)
 
-	resp, err := service.ValidateBrowserMFAChallenge(
+	resp, err := service.CompleteBrowserMFAChallenge(
 		ctx,
-		&mfav1.ValidateBrowserMFAChallengeRequest{
+		&mfav1.CompleteBrowserMFAChallengeRequest{
 			BrowserMfaResponse: &mfav1.BrowserMFAResponse{
 				RequestId: requestID,
 				WebauthnResponse: &webauthnpb.CredentialAssertionResponse{
@@ -1336,7 +1336,7 @@ func TestValidateBrowserMFAChallenge_Success(t *testing.T) {
 	require.Contains(t, resp.TshRedirectUrl, "127.0.0.1")
 }
 
-func TestValidateBrowserMFAChallenge_NonProxyDenied(t *testing.T) {
+func TestCompleteBrowserMFAChallenge_NonProxyDenied(t *testing.T) {
 	t.Parallel()
 
 	_, service, _, user := setupAuthServer(t, nil)
@@ -1344,9 +1344,9 @@ func TestValidateBrowserMFAChallenge_NonProxyDenied(t *testing.T) {
 	// Use a context with a non-proxy role (regular user).
 	ctx := authz.ContextWithUser(t.Context(), authtest.TestUserWithRoles(user.GetName(), user.GetRoles()).I)
 
-	resp, err := service.ValidateBrowserMFAChallenge(
+	resp, err := service.CompleteBrowserMFAChallenge(
 		ctx,
-		&mfav1.ValidateBrowserMFAChallengeRequest{
+		&mfav1.CompleteBrowserMFAChallengeRequest{
 			BrowserMfaResponse: &mfav1.BrowserMFAResponse{
 				RequestId: "test-request-id",
 				WebauthnResponse: &webauthnpb.CredentialAssertionResponse{
@@ -1361,28 +1361,28 @@ func TestValidateBrowserMFAChallenge_NonProxyDenied(t *testing.T) {
 	require.Nil(t, resp)
 }
 
-func TestValidateBrowserMFAChallenge_InvalidRequest(t *testing.T) {
+func TestCompleteBrowserMFAChallenge_InvalidRequest(t *testing.T) {
 	t.Parallel()
 
 	authServer, service, _, _ := setupAuthServer(t, nil)
 
-	ctx := authz.ContextWithUser(t.Context(), authtest.TestBuiltin(types.RoleProxy).I)
+	ctx := authz.ContextWithUser(t.Context(), authtest.TestUserWithRoles("test-user", []string{"test-role"}).I)
 
 	for _, testCase := range []struct {
 		name          string
-		req           *mfav1.ValidateBrowserMFAChallengeRequest
+		req           *mfav1.CompleteBrowserMFAChallengeRequest
 		expectedError string
 	}{
 		{
 			name: "missing BrowserMfaResponse",
-			req: &mfav1.ValidateBrowserMFAChallengeRequest{
+			req: &mfav1.CompleteBrowserMFAChallengeRequest{
 				BrowserMfaResponse: nil,
 			},
 			expectedError: "missing browser_mfa_response in request",
 		},
 		{
 			name: "missing RequestId",
-			req: &mfav1.ValidateBrowserMFAChallengeRequest{
+			req: &mfav1.CompleteBrowserMFAChallengeRequest{
 				BrowserMfaResponse: &mfav1.BrowserMFAResponse{
 					RequestId: "",
 					WebauthnResponse: &webauthnpb.CredentialAssertionResponse{
@@ -1394,7 +1394,7 @@ func TestValidateBrowserMFAChallenge_InvalidRequest(t *testing.T) {
 		},
 		{
 			name: "missing WebauthnResponse",
-			req: &mfav1.ValidateBrowserMFAChallengeRequest{
+			req: &mfav1.CompleteBrowserMFAChallengeRequest{
 				BrowserMfaResponse: &mfav1.BrowserMFAResponse{
 					RequestId:        "test-request-id",
 					WebauthnResponse: nil,
@@ -1403,10 +1403,9 @@ func TestValidateBrowserMFAChallenge_InvalidRequest(t *testing.T) {
 			expectedError: "missing webauthn_response in browser_mfa_response",
 		},
 		{
-			name: "invalid RequestId",
-			req: func() *mfav1.ValidateBrowserMFAChallengeRequest {
-				// Valid request format but non-existent requestID.
-				return &mfav1.ValidateBrowserMFAChallengeRequest{
+			name: "non-existant RequestId",
+			req: func() *mfav1.CompleteBrowserMFAChallengeRequest {
+				return &mfav1.CompleteBrowserMFAChallengeRequest{
 					BrowserMfaResponse: &mfav1.BrowserMFAResponse{
 						RequestId: "non-existent-request-id",
 						WebauthnResponse: &webauthnpb.CredentialAssertionResponse{
@@ -1424,7 +1423,7 @@ func TestValidateBrowserMFAChallenge_InvalidRequest(t *testing.T) {
 				authServer.requestIDs.Store("valid-id", struct{}{})
 			}
 
-			resp, err := service.ValidateBrowserMFAChallenge(ctx, testCase.req)
+			resp, err := service.CompleteBrowserMFAChallenge(ctx, testCase.req)
 			require.Error(t, err)
 			require.ErrorContains(t, err, testCase.expectedError)
 			require.Nil(t, resp)
@@ -1432,17 +1431,17 @@ func TestValidateBrowserMFAChallenge_InvalidRequest(t *testing.T) {
 	}
 }
 
-func TestValidateBrowserMFAChallenge_NodeDenied(t *testing.T) {
+func TestCompleteBrowserMFAChallenge_NodeDenied(t *testing.T) {
 	t.Parallel()
 
 	_, service, _, _ := setupAuthServer(t, nil)
 
-	// Use a context with a node role (not proxy).
+	// Use a context with a node role (not user).
 	ctx := authz.ContextWithUser(t.Context(), authtest.TestBuiltin(types.RoleNode).I)
 
-	resp, err := service.ValidateBrowserMFAChallenge(
+	resp, err := service.CompleteBrowserMFAChallenge(
 		ctx,
-		&mfav1.ValidateBrowserMFAChallengeRequest{
+		&mfav1.CompleteBrowserMFAChallengeRequest{
 			BrowserMfaResponse: &mfav1.BrowserMFAResponse{
 				RequestId: "test-request-id",
 				WebauthnResponse: &webauthnpb.CredentialAssertionResponse{
@@ -1453,7 +1452,7 @@ func TestValidateBrowserMFAChallenge_NodeDenied(t *testing.T) {
 	)
 	require.Error(t, err)
 	require.True(t, trace.IsAccessDenied(err))
-	require.ErrorContains(t, err, "this request can only be executed by a proxy")
+	require.ErrorContains(t, err, "only local or remote users can complete a browser MFA challenge")
 	require.Nil(t, resp)
 }
 

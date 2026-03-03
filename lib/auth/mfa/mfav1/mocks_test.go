@@ -119,8 +119,8 @@ func (m *mockAuthServer) VerifySSOMFASession(
 	}, nil
 }
 
-// ValidateBrowserMFAChallenge mocks the validation of a browser MFA challenge.
-func (m *mockAuthServer) ValidateBrowserMFAChallenge(
+// CompleteBrowserMFAChallenge mocks the validation of a browser MFA challenge.
+func (m *mockAuthServer) CompleteBrowserMFAChallenge(
 	ctx context.Context,
 	requestID string,
 	webauthnResponse *webauthnpb.CredentialAssertionResponse,
