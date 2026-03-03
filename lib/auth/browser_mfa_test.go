@@ -45,12 +45,7 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 
 	a := testServer.Auth()
 
-	// Create a test user with password.
-	username := "test-user"
-	password := "test-password"
-	_, _, err = authtest.CreateUserAndRole(a, username, []string{"role"}, nil)
-	require.NoError(t, err)
-	err = a.UpsertPassword(username, []byte(password))
+	userCreds, err := createUserWithSecondFactors(testServer.TLS)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -76,12 +71,12 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 			setup: func(t *testing.T) {
 				session := &services.SSOMFASessionData{
 					RequestID:     "test-request-1",
-					Username:      username,
+					Username:      userCreds.username,
 					ConnectorID:   "Browser",
 					ConnectorType: "Browser",
 					ChallengeExtensions: &mfatypes.ChallengeExtensions{
 						Scope:                       mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
-						AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES,
+						AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_NO,
 						UserVerificationRequirement: "required",
 					},
 				}
@@ -91,12 +86,12 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 			browserMFAReqID: "test-request-1",
 			requestExtensions: &mfav1.ChallengeExtensions{
 				Scope:                       mfav1.ChallengeScope_CHALLENGE_SCOPE_UNSPECIFIED,
-				AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_NO,
+				AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES,
 				UserVerificationRequirement: "discouraged",
 			},
 			wantExtensions: &mfav1.ChallengeExtensions{
 				Scope:                       mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
-				AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES,
+				AllowReuse:                  mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_NO,
 				UserVerificationRequirement: "required",
 			},
 		},
@@ -105,7 +100,7 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 			setup: func(t *testing.T) {
 				session := &services.SSOMFASessionData{
 					RequestID:           "test-request-2",
-					Username:            username,
+					Username:            userCreds.username,
 					ConnectorID:         "Browser",
 					ConnectorType:       "Browser",
 					ChallengeExtensions: nil,
@@ -134,8 +129,8 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 			req := &proto.CreateAuthenticateChallengeRequest{
 				Request: &proto.CreateAuthenticateChallengeRequest_UserCredentials{
 					UserCredentials: &proto.UserCredentials{
-						Username: username,
-						Password: []byte(password),
+						Username: userCreds.username,
+						Password: []byte(userCreds.password),
 					},
 				},
 				BrowserMFARequestID: tt.browserMFAReqID,
@@ -152,6 +147,7 @@ func TestCreateAuthenticateChallenge_BrowserMFARequestID(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, challenge)
+			assert.NotNil(t, challenge.WebauthnChallenge, "expected WebAuthn challenge to be present")
 
 			if tt.wantExtensions != nil {
 				require.Equal(t, tt.wantExtensions, gotExtensions)
