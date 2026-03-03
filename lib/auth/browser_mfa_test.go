@@ -205,11 +205,7 @@ func TestBrowserMFAChallengeCreation(t *testing.T) {
 				BrowserMFATSHRedirectURL: redirectURL,
 			},
 			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge) {
-<<<<<<< HEAD
 				assert.Nil(t, chal.BrowserMFAChallenge, "SSO MFA users should not get Browser MFA challenge")
-=======
-				assert.Nil(t, chal.BrowserMFAChallenge, "SSO users should not get Browser MFA challenge")
->>>>>>> 42558e14822 (Redo tests)
 			},
 		},
 		{
