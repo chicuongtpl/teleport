@@ -119,7 +119,7 @@ func (m *mockAuthServer) VerifySSOMFASession(
 	}, nil
 }
 
-// CompleteBrowserMFAChallenge mocks the validation of a browser MFA challenge.
+// CompleteBrowserMFAChallenge mocks the completion of a browser MFA challenge.
 func (m *mockAuthServer) CompleteBrowserMFAChallenge(
 	ctx context.Context,
 	requestID string,

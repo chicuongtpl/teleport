@@ -1311,13 +1311,12 @@ func TestVerifyValidatedMFAChallenge_WebauthnFailedStorage(t *testing.T) {
 func TestCompleteBrowserMFAChallenge_Success(t *testing.T) {
 	t.Parallel()
 
-	authServer, service, _, _ := setupAuthServer(t, nil)
+	authServer, service, _, user := setupAuthServer(t, nil)
 
-	// Create a challenge first to get a valid request ID.
 	requestID := "test-request-id"
 	authServer.requestIDs.Store(requestID, struct{}{})
 
-	ctx := authz.ContextWithUser(t.Context(), authtest.TestBuiltin(types.RoleProxy).I)
+	ctx := authz.ContextWithUser(t.Context(), authtest.TestUserWithRoles(user.GetName(), user.GetRoles()).I)
 
 	resp, err := service.CompleteBrowserMFAChallenge(
 		ctx,
@@ -1336,13 +1335,13 @@ func TestCompleteBrowserMFAChallenge_Success(t *testing.T) {
 	require.Contains(t, resp.TshRedirectUrl, "127.0.0.1")
 }
 
-func TestCompleteBrowserMFAChallenge_NonProxyDenied(t *testing.T) {
+func TestCompleteBrowserMFAChallenge_NonUserDenied(t *testing.T) {
 	t.Parallel()
 
-	_, service, _, user := setupAuthServer(t, nil)
+	_, service, _, _ := setupAuthServer(t, nil)
 
-	// Use a context with a non-proxy role (regular user).
-	ctx := authz.ContextWithUser(t.Context(), authtest.TestUserWithRoles(user.GetName(), user.GetRoles()).I)
+	// Use a context with a non-user role (proxy).
+	ctx := authz.ContextWithUser(t.Context(), authtest.TestBuiltin(types.RoleProxy).I)
 
 	resp, err := service.CompleteBrowserMFAChallenge(
 		ctx,
@@ -1357,16 +1356,16 @@ func TestCompleteBrowserMFAChallenge_NonProxyDenied(t *testing.T) {
 	)
 	require.Error(t, err)
 	require.True(t, trace.IsAccessDenied(err))
-	require.ErrorContains(t, err, "this request can only be executed by a proxy")
+	require.ErrorContains(t, err, "only local or remote users can complete a browser MFA challenge")
 	require.Nil(t, resp)
 }
 
 func TestCompleteBrowserMFAChallenge_InvalidRequest(t *testing.T) {
 	t.Parallel()
 
-	authServer, service, _, _ := setupAuthServer(t, nil)
+	authServer, service, _, user := setupAuthServer(t, nil)
 
-	ctx := authz.ContextWithUser(t.Context(), authtest.TestUserWithRoles("test-user", []string{"test-role"}).I)
+	ctx := authz.ContextWithUser(t.Context(), authtest.TestUserWithRoles(user.GetName(), user.GetRoles()).I)
 
 	for _, testCase := range []struct {
 		name          string
@@ -1429,31 +1428,6 @@ func TestCompleteBrowserMFAChallenge_InvalidRequest(t *testing.T) {
 			require.Nil(t, resp)
 		})
 	}
-}
-
-func TestCompleteBrowserMFAChallenge_NodeDenied(t *testing.T) {
-	t.Parallel()
-
-	_, service, _, _ := setupAuthServer(t, nil)
-
-	// Use a context with a node role (not user).
-	ctx := authz.ContextWithUser(t.Context(), authtest.TestBuiltin(types.RoleNode).I)
-
-	resp, err := service.CompleteBrowserMFAChallenge(
-		ctx,
-		&mfav1.CompleteBrowserMFAChallengeRequest{
-			BrowserMfaResponse: &mfav1.BrowserMFAResponse{
-				RequestId: "test-request-id",
-				WebauthnResponse: &webauthnpb.CredentialAssertionResponse{
-					Type: "public-key",
-				},
-			},
-		},
-	)
-	require.Error(t, err)
-	require.True(t, trace.IsAccessDenied(err))
-	require.ErrorContains(t, err, "only local or remote users can complete a browser MFA challenge")
-	require.Nil(t, resp)
 }
 
 func setupAuthServer(t *testing.T, devices []*types.MFADevice) (*mockAuthServer, *mfav1impl.Service, *eventstest.MockRecorderEmitter, types.User) {
