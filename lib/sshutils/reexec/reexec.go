@@ -20,7 +20,6 @@
 package reexec
 
 import (
-	"errors"
 	"io"
 	"strings"
 
@@ -30,25 +29,22 @@ import (
 // TODO(Joerger): Isolate reexec logic scattered throughout lib/srv to this package,
 // with additional packages for each of the reexec types (sftp, exec, networking, etc).
 
-// ReadChildError reads the child process's stderr pipe for an error.
-// If stderr is empty, a nil childErr is returned. If stderr is non-empty and
-// looks like "Failed to launch: <internal-error-message>", it is returned as childErr,
-// potentially with additional error context gathered from the given
-// server context. Otherwise, err is returned.
-func ReadChildError(stderr io.Reader) (childErr error, err error) {
+// ReadChildError reads the child process's stderr pipe and returns it as a string.
+// If the stderr pipe is empty, an empty string and nil error is returned.
+func ReadChildError(stderr io.Reader) (string, error) {
 	// Read the error msg from stderr.
 	errMsg := new(strings.Builder)
-	if _, err := io.Copy(errMsg, stderr); err != nil {
-		return nil, trace.Wrap(err, "Failed to read error message from child process")
+	if _, err := io.Copy(errMsg, io.LimitReader(stderr, 4096)); err != nil {
+		return "", trace.Wrap(err, "Failed to read error message from child process")
 	}
 
 	if errMsg.Len() == 0 {
-		return nil, nil
+		return "", nil
 	}
 
 	// TODO(Joerger): Process the err msg from stderr to provide deeper insights into
 	// the cause of the session failure to add to the error message.
 	// e.g. user unknown because host user creation denied.
 
-	return errors.New(errMsg.String()), nil
+	return errMsg.String(), nil
 }

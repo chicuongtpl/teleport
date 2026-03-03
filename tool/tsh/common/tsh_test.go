@@ -8299,7 +8299,7 @@ func TestListNodesCLIFlags(t *testing.T) {
 	}
 }
 
-func TestSSHStderrorPropagation(t *testing.T) {
+func TestSSHStderrPropagation(t *testing.T) {
 	ctx := t.Context()
 	connector := mockConnector(t)
 
