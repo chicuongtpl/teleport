@@ -241,9 +241,7 @@ func (t *terminal) Run(ctx context.Context) error {
 		if err != nil {
 			t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
 		} else if childErr != "" {
-			// Since we are writing straight to stderr rather than the PTY, ensure we add a CRLF.
-			errMsg := childErr + "\r\n"
-			if _, err := io.WriteString(sess.Stderr(), errMsg); err != nil {
+			if _, err := io.WriteString(sess.Stderr(), childErr); err != nil {
 				t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
 			}
 		}

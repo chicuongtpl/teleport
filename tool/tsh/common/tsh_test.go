@@ -8323,10 +8323,7 @@ func TestSSHStderrPropagation(t *testing.T) {
 					require.Error(t, err)
 
 					// If there is a tty, we expect CRLF instead of just LF.
-					expectErr := fmt.Sprintf("Failed to launch: %v\n", user.UnknownUserError(missingLogin))
-					if sc.tty || len(sc.remoteCommand) == 0 {
-						expectErr = strings.ReplaceAll(expectErr, "\n", "\r\n")
-					}
+					expectErr := fmt.Sprintf("Failed to launch: %v.\r\n", user.UnknownUserError(missingLogin))
 
 					// Check for exact match to catch regressions with new lines.
 					require.Equal(t, expectErr, stderr.String())
