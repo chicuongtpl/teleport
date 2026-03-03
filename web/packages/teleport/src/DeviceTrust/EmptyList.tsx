@@ -429,40 +429,6 @@ const AccessDeniedCard = () => {
   );
 };
 
-export function FeatureLimitBlurb({ limit = 1 }: { limit: number }) {
-  if (limit === 0) {
-    // unlimited access
-    return null;
-  }
-
-  const listText = pluralize(limit, 'List');
-  return (
-    <Box
-      mt={4}
-      css={`
-        text-align: center;
-      `}
-    >
-      <P2 color="text.slightlyMuted">
-        <i>
-          Your current plan supports {limit} free Access {listText}.
-        </i>
-      </P2>
-      <P1 mt={1}>
-        Want additional Access Lists?{' '}
-        <ButtonLockedFeature
-          width="176px"
-          textLink={true}
-          event={CtaEvent.CTA_ACCESS_LIST}
-          pl={1}
-        >
-          Contact Sales
-        </ButtonLockedFeature>
-      </P1>
-    </Box>
-  );
-}
-
 const PreviewBox = styled(Box)`
   margin-left: ${p => p.theme.space[5]}px;
   width: 675px;
