@@ -8109,7 +8109,7 @@ func (a *Server) mfaAuthChallenge(ctx context.Context, user, ssoClientRedirectUR
 		}
 	}
 
-	// If the user has a WebAuthn device and no SSO configured, return a Browser
+	// If the user has a WebAuthn device and no SSO MFA configured, return a Browser
 	// MFA challenge. This challenge is useful in cases where a user only has a
 	// browser-associated WebAuthn device, but is trying to MFA via a CLI tool (tsh, tctl etc.)
 	if groupedDevs.Browser != nil && browserMFATSHRedirectURL != "" {
