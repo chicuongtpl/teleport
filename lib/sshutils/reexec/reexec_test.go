@@ -43,12 +43,12 @@ func TestReadChildError(t *testing.T) {
 		},
 		{
 			name:   "no context returns stderr as is",
-			stderr: "Failed to launch: test error.\r\n",
-			want:   "Failed to launch: test error.\r\n",
+			stderr: "Failed to launch: test error.\n",
+			want:   "Failed to launch: test error.\n",
 		},
 		{
 			name:   "unknown user error with mixed host user creation decisions gets contextualized",
-			stderr: "Failed to launch: user: unknown user teleport-test-user-does-not-exist-reexec.\r\n",
+			stderr: "Failed to launch: user: unknown user teleport-test-user-does-not-exist-reexec.\n",
 			context: &ErrorContext{
 				Login: "teleport-test-user-does-not-exist-reexec",
 				DecisionContext: &decisionpb.SSHAccessPermitContext{
@@ -60,11 +60,11 @@ func TestReadChildError(t *testing.T) {
 					},
 				},
 			},
-			want: "Failed to launch: user: unknown user teleport-test-user-does-not-exist-reexec: host user creation denied by the following resources: [role: \"deny-role\"]\r\n",
+			want: "Failed to launch: user: unknown user teleport-test-user-does-not-exist-reexec: host user creation denied by the following resources: [role: \"deny-role\"]\n",
 		},
 		{
 			name:   "pam context error for unknown user gets contextualized",
-			stderr: "Failed to launch: failed to open PAM context: pam_start failed.\r\n",
+			stderr: "Failed to launch: failed to open PAM context: pam_start failed.\n",
 			context: &ErrorContext{
 				Login: "teleport-test-user-does-not-exist-pam",
 				DecisionContext: &decisionpb.SSHAccessPermitContext{
@@ -76,7 +76,7 @@ func TestReadChildError(t *testing.T) {
 					},
 				},
 			},
-			want: "Failed to launch: failed to open PAM context: pam_start failed: host user creation denied by the following resources: [role: \"deny-role\"]\r\n",
+			want: "Failed to launch: failed to open PAM context: pam_start failed: host user creation denied by the following resources: [role: \"deny-role\"]\n",
 		},
 	}
 
