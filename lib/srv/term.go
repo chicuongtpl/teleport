@@ -212,17 +212,11 @@ func (t *terminal) Run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
+	// Pass the TTY to the child since a terminal is attached.
 	// we need the lock here to protect from concurrent calls to Close()
 	t.mu.Lock()
-	tty := t.tty
+	t.cmd.ExtraFiles = append(t.cmd.ExtraFiles, t.tty)
 	t.mu.Unlock()
-
-	// Intentionally passing a nil value instead of the PTY. The child
-	// process does not need the PTY, but for compatibility purposes the
-	// first ExtraFiles is left for the PTY descriptor.
-	t.cmd.ExtraFiles = append(t.cmd.ExtraFiles, nil)
-	// Pass the TTY to the child since a terminal is attached.
-	t.cmd.ExtraFiles = append(t.cmd.ExtraFiles, tty)
 
 	// Capture stderr.
 	stderrR, stderrW, err := os.Pipe()
