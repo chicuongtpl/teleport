@@ -8389,7 +8389,7 @@ func TestSSHStderrPropagation(t *testing.T) {
 				require.ErrorAs(t, err, &exitCodeErr)
 				require.Equal(t, teleport.RemoteCommandFailure, exitCodeErr.Code)
 
-				unkownUserReexecError := fmt.Sprintf("Failed to launch: %v.\r\n", user.UnknownUserError(missingLogin))
+				unkownUserReexecError := fmt.Sprintf("Failed to launch: %v.\n", user.UnknownUserError(missingLogin))
 				var expectStderr string
 				if tc.x11Forward {
 					expectStderr += fmt.Sprintf("X11 forwarding request failed: %v", unkownUserReexecError)
@@ -8421,7 +8421,7 @@ func TestSSHStderrPropagation(t *testing.T) {
 				require.ErrorAs(t, err, &exitCodeErr)
 				require.Equal(t, teleport.RemoteCommandFailure, exitCodeErr.Code)
 
-				contextualReexecErrorMessage := fmt.Sprintf("Failed to launch: %s: host user creation denied by the following resources: [%s: %q]\r\n",
+				contextualReexecErrorMessage := fmt.Sprintf("Failed to launch: %s: host user creation denied by the following resources: [%s: %q]\n",
 					user.UnknownUserError(missingLogin),
 					types.KindRole,
 					roleNodeAccessMissingLogin.GetName(),
