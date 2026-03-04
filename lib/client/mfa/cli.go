@@ -116,22 +116,7 @@ type mfaPromptState struct {
 // filterMFAMethods determines which MFA method(s) to prompt for based on available methods,
 // user preferences, and configuration. It prints a message to the user if multiple methods
 // are available and returns the filtered state and list of available methods.
-func (c *CLIPrompt) filterMFAMethods(state mfaPromptState, isPerSessionMFA bool) (mfaPromptState, []string, bool) {
-	// Build list of available methods from input state.
-	var availableMethods []string
-	if state.promptWebauthn {
-		availableMethods = append(availableMethods, cliMFATypeWebauthn)
-	}
-	if state.promptSSO {
-		availableMethods = append(availableMethods, cliMFATypeSSO)
-	}
-	if state.promptOTP && !isPerSessionMFA {
-		availableMethods = append(availableMethods, cliMFATypeOTP)
-	}
-	if state.promptBrowser {
-		availableMethods = append(availableMethods, cliMFATypeBrowserMFA)
-	}
-
+func (c *CLIPrompt) filterMFAMethods(state mfaPromptState, isPerSessionMFA bool, availableMethods []string) (mfaPromptState, bool) {
 	var chosenMethods []string
 	var userSpecifiedMethod bool
 
@@ -193,11 +178,11 @@ func (c *CLIPrompt) filterMFAMethods(state mfaPromptState, isPerSessionMFA bool)
 		availableMethodsString := strings.ToLower(strings.Join(availableMethods, ","))
 		const msg = "" +
 			"Available MFA methods [%v]. Continuing with %v.\n" +
-			"If you wish to perform MFA with specific method, specify with flag --mfa-mode=<%v> or environment variable TELEPORT_MFA_MODE=<%v>.\n\n"
+			"If you wish to perform MFA with another method, specify with flag --mfa-mode=<%v> or environment variable TELEPORT_MFA_MODE=<%v>.\n\n"
 		fmt.Fprintf(c.writer(), msg, strings.Join(availableMethods, ", "), strings.Join(chosenMethods, " and "), availableMethodsString, availableMethodsString)
 	}
 
-	return state, availableMethods, userSpecifiedMethod
+	return state, userSpecifiedMethod
 }
 
 // Run prompts the user to complete an MFA authentication challenge.
@@ -220,6 +205,22 @@ func (c *CLIPrompt) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 	}
 
 	isPerSessionMFA := c.cfg.Extensions.GetScope() == mfav1.ChallengeScope_CHALLENGE_SCOPE_USER_SESSION
+
+	// Build list of available methods from the challenge before filtering
+	// out unsupported methods. This list is used in user-facing messages.
+	var availableMethods []string
+	if state.promptWebauthn {
+		availableMethods = append(availableMethods, cliMFATypeWebauthn)
+	}
+	if state.promptSSO {
+		availableMethods = append(availableMethods, cliMFATypeSSO)
+	}
+	if state.promptOTP && !isPerSessionMFA {
+		availableMethods = append(availableMethods, cliMFATypeOTP)
+	}
+	if state.promptBrowser {
+		availableMethods = append(availableMethods, cliMFATypeBrowserMFA)
+	}
 
 	// Check off unsupported methods.
 	if state.promptWebauthn && !c.cfg.WebauthnSupported {
@@ -248,9 +249,8 @@ func (c *CLIPrompt) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 	}
 
 	// Determine which method(s) to use and print options if multiple are available.
-	var availableMethods []string
 	var userSpecifiedMethod bool
-	state, availableMethods, userSpecifiedMethod = c.filterMFAMethods(state, isPerSessionMFA)
+	state, userSpecifiedMethod = c.filterMFAMethods(state, isPerSessionMFA, availableMethods)
 
 	// Perform MFA with automatic fallback to other methods on failure.
 	// In order: WebAuthn > SSO > Browser MFA > OTP
@@ -339,7 +339,7 @@ func (c *CLIPrompt) promptWithFallback(ctx context.Context, chal *proto.MFAAuthe
 		}
 
 		// Print error message about the failure.
-		fmt.Fprintf(c.writer(), "\nMFA authentication with %s failed: %v\n", currentMethod, err)
+		fmt.Fprintf(c.writer(), "MFA authentication with %s failed, check logs for details\n", currentMethod)
 
 		// Disable the failed method and loop to try the next one.
 		// Fallback only moves forward in priority order: WebAuthn > SSO > Browser MFA > OTP

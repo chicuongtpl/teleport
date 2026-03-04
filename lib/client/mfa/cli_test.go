@@ -270,7 +270,7 @@ func TestCLIPrompt(t *testing.T) {
 		},
 		{
 			name:         "NOK no webauthn response",
-			expectStdOut: "Tap any security key\n",
+			expectStdOut: "Tap any security key\nMFA authentication with WEBAUTHN failed, check logs for details\n",
 			challenge: &proto.MFAAuthenticateChallenge{
 				WebauthnChallenge: &webauthnpb.CredentialAssertion{},
 			},
@@ -278,7 +278,7 @@ func TestCLIPrompt(t *testing.T) {
 		},
 		{
 			name:         "NOK no sso response",
-			expectStdOut: "",
+			expectStdOut: "MFA authentication with SSO failed, check logs for details\n",
 			challenge: &proto.MFAAuthenticateChallenge{
 				SSOChallenge: &proto.SSOChallenge{},
 			},
@@ -286,7 +286,7 @@ func TestCLIPrompt(t *testing.T) {
 		},
 		{
 			name:         "NOK no otp response",
-			expectStdOut: "Enter an OTP code from a device:\n",
+			expectStdOut: "Enter an OTP code from a device:\nMFA authentication with OTP failed, check logs for details\n",
 			challenge: &proto.MFAAuthenticateChallenge{
 				TOTP: &proto.TOTPChallenge{},
 			},
@@ -294,7 +294,7 @@ func TestCLIPrompt(t *testing.T) {
 		},
 		{
 			name:         "NOK no webauthn or otp response",
-			expectStdOut: "Tap any security key or enter a code from a OTP device\n",
+			expectStdOut: "Tap any security key or enter a code from a OTP device\nMFA authentication with WEBAUTHN failed, check logs for details\nAttempting MFA authentication with OTP\nEnter an OTP code from a device:\nMFA authentication with OTP failed, check logs for details\n",
 			challenge: &proto.MFAAuthenticateChallenge{
 				WebauthnChallenge: &webauthnpb.CredentialAssertion{},
 				TOTP:              &proto.TOTPChallenge{},
@@ -425,7 +425,7 @@ Enter your security key PIN:
 					Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_USER_SESSION,
 				}
 			},
-			expectErr: trace.AccessDenied("only WebAuthn and SSO MFA methods are supported with per-session MFA"),
+			expectErr: trace.AccessDenied("only WebAuthn, SSO MFA, and Browser MFA methods are supported with per-session MFA"),
 		},
 		{
 			name: "NOK prefer otp with per-session MFA",
@@ -438,7 +438,7 @@ Enter your security key PIN:
 				}
 				cfg.PreferOTP = true
 			},
-			expectErr: trace.AccessDenied("only WebAuthn and SSO MFA methods are supported with per-session MFA, can not specify --mfa-mode=otp"),
+			expectErr: trace.AccessDenied("only WebAuthn, SSO MFA, and Browser MFA methods are supported with per-session MFA, cannot specify --mfa-mode=otp"),
 		},
 		{
 			name:         "OK webauthn or otp with stdin hijack and per-session MFA, no choice presented",
@@ -496,6 +496,47 @@ Enter your security key PIN:
 					SSO: &proto.SSOResponse{
 						RequestId: "request-id",
 						Token:     "mfa-token",
+					},
+				},
+			},
+		},
+		{
+			name: "OK prompt fallback webauthn > SSO > browser MFA",
+			expectStdOut: "" +
+				"Available MFA methods [WEBAUTHN, BROWSER]. Continuing with WEBAUTHN.\n" +
+				"If you wish to perform MFA with another method, specify with flag --mfa-mode=<webauthn,browser> or environment variable TELEPORT_MFA_MODE=<webauthn,browser>.\n\n" +
+				"Tap any security key\n" +
+				"MFA authentication with WEBAUTHN failed, check logs for details\n" +
+				"Attempting MFA authentication with BROWSER\n",
+			challenge: &proto.MFAAuthenticateChallenge{
+				WebauthnChallenge:   &webauthnpb.CredentialAssertion{},
+				BrowserMFAChallenge: &proto.BrowserMFAChallenge{},
+			},
+			makeWebauthnLoginFunc: func(_ *prompt.FakeReader) mfa.WebauthnLoginFunc {
+				return func(ctx context.Context, origin string, assertion *wantypes.CredentialAssertion, prompt wancli.LoginPrompt, opts *wancli.LoginOpts) (*proto.MFAAuthenticateResponse, string, error) {
+					if _, err := prompt.PromptTouch(); err != nil {
+						return nil, "", trace.Wrap(err)
+					}
+					return nil, "", errors.New("webauthn device not found")
+				}
+			},
+			modifyPromptConfig: func(cfg *mfa.CLIPromptConfig) {
+				cfg.SSOMFACeremony = &mockSSOMFACeremony{
+					runFunc: func(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+						return &proto.MFAAuthenticateResponse{
+							Response: &proto.MFAAuthenticateResponse_Browser{
+								Browser: &proto.BrowserMFAResponse{
+									RequestId: "request-id",
+								},
+							},
+						}, nil
+					},
+				}
+			},
+			expectResp: &proto.MFAAuthenticateResponse{
+				Response: &proto.MFAAuthenticateResponse_Browser{
+					Browser: &proto.BrowserMFAResponse{
+						RequestId: "request-id",
 					},
 				},
 			},
@@ -563,6 +604,7 @@ Enter your security key PIN:
 
 type mockSSOMFACeremony struct {
 	mfaResp *proto.MFAAuthenticateResponse
+	runFunc func(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error)
 }
 
 func (m *mockSSOMFACeremony) GetClientCallbackURL() string {
@@ -575,6 +617,9 @@ func (m *mockSSOMFACeremony) GetProxyAddress() string {
 
 // Run the SSO MFA ceremony.
 func (m *mockSSOMFACeremony) Run(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+	if m.runFunc != nil {
+		return m.runFunc(ctx, chal)
+	}
 	if m.mfaResp == nil {
 		return nil, context.DeadlineExceeded
 	}
