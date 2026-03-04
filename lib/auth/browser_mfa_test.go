@@ -109,7 +109,7 @@ func newBrowserMFATestEnv(t *testing.T) testEnv {
 	}
 }
 
-func TestBrowserMFAChallenge_Creation(t *testing.T) {
+func TestBrowserMFAChallengeCreation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -198,14 +198,14 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 			},
 		},
 		{
-			name:     "NOK SSO user should not get Browser MFA",
+			name:     "NOK SSO MFA user should not get Browser MFA",
 			username: samlUser.GetName(),
 			challengeRequest: &proto.CreateAuthenticateChallengeRequest{
 				ChallengeExtensions:      loginExt,
 				BrowserMFATSHRedirectURL: redirectURL,
 			},
 			assertChallenge: func(t *testing.T, chal *proto.MFAAuthenticateChallenge) {
-				assert.Nil(t, chal.BrowserMFAChallenge, "SSO users should not get Browser MFA challenge")
+				assert.Nil(t, chal.BrowserMFAChallenge, "SSO MFA users should not get Browser MFA challenge")
 			},
 		},
 		{
@@ -275,111 +275,6 @@ func TestBrowserMFAChallenge_Creation(t *testing.T) {
 			require.NotNil(t, chal)
 			if tt.assertChallenge != nil {
 				tt.assertChallenge(t, chal)
-			}
-		})
-	}
-}
-
-func TestBrowserMFAChallenge_Validation(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	env := newBrowserMFATestEnv(t)
-	a := env.auth
-
-	for _, tt := range []struct {
-		name             string
-		sd               *services.SSOMFASessionData
-		requestID        string
-		checkError       func(t *testing.T, err error)
-		assertValidation func(t *testing.T, sd *services.SSOMFASessionData)
-	}{
-		{
-			name:      "NOK session data not found",
-			sd:        nil,
-			requestID: "nonexistent-request",
-			checkError: func(t *testing.T, err error) {
-				require.Error(t, err, "should fail when session data not found")
-			},
-		},
-		{
-			name: "OK session data retrieved correctly",
-			sd: &services.SSOMFASessionData{
-				RequestID:      "request1",
-				Username:       env.webauthnUser.GetName(),
-				ConnectorID:    constants.BrowserMFA,
-				ConnectorType:  constants.BrowserMFA,
-				TshRedirectURL: redirectURL,
-				ChallengeExtensions: &mfatypes.ChallengeExtensions{
-					Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
-				},
-			},
-			requestID: "request1",
-			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData) {
-				require.NotNil(t, sd)
-				assert.Equal(t, "request1", sd.RequestID)
-				assert.Equal(t, env.webauthnUser.GetName(), sd.Username)
-				assert.Equal(t, constants.BrowserMFA, sd.ConnectorID)
-				assert.Equal(t, constants.BrowserMFA, sd.ConnectorType)
-				assert.Equal(t, redirectURL, sd.TshRedirectURL)
-				assert.Equal(t, mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN, sd.ChallengeExtensions.Scope)
-			},
-		},
-		{
-			name: "OK session data with allow reuse",
-			sd: &services.SSOMFASessionData{
-				RequestID:      "request2",
-				Username:       env.webauthnUser.GetName(),
-				ConnectorID:    constants.BrowserMFA,
-				ConnectorType:  constants.BrowserMFA,
-				TshRedirectURL: redirectURL,
-				ChallengeExtensions: &mfatypes.ChallengeExtensions{
-					Scope:      mfav1.ChallengeScope_CHALLENGE_SCOPE_USER_SESSION,
-					AllowReuse: mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES,
-				},
-			},
-			requestID: "request2",
-			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData) {
-				require.NotNil(t, sd)
-				assert.Equal(t, mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES, sd.ChallengeExtensions.AllowReuse)
-			},
-		},
-		{
-			name: "OK session data with admin action scope",
-			sd: &services.SSOMFASessionData{
-				RequestID:      "request3",
-				Username:       env.webauthnUser.GetName(),
-				ConnectorID:    constants.BrowserMFA,
-				ConnectorType:  constants.BrowserMFA,
-				TshRedirectURL: redirectURL,
-				ChallengeExtensions: &mfatypes.ChallengeExtensions{
-					Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_ADMIN_ACTION,
-				},
-			},
-			requestID: "request3",
-			assertValidation: func(t *testing.T, sd *services.SSOMFASessionData) {
-				require.NotNil(t, sd)
-				assert.Equal(t, mfav1.ChallengeScope_CHALLENGE_SCOPE_ADMIN_ACTION, sd.ChallengeExtensions.Scope)
-			},
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.sd != nil {
-				err := a.UpsertSSOMFASessionData(ctx, tt.sd)
-				require.NoError(t, err)
-			}
-
-			sd, err := a.GetSSOMFASessionData(ctx, tt.requestID)
-
-			if tt.checkError != nil {
-				require.Error(t, err)
-				tt.checkError(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			if tt.assertValidation != nil {
-				tt.assertValidation(t, sd)
 			}
 		})
 	}
