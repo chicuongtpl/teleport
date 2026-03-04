@@ -76,6 +76,12 @@ func (d *DiscardAuditLog) StreamSessionEvents(ctx context.Context, sessionID ses
 	return c, e
 }
 
+func (d *DiscardAuditLog) StreamUploadEvents(ctx context.Context, sessionID session.ID, uploadID string, startIndex int64) (chan apievents.AuditEvent, chan error) {
+	c, e := make(chan apievents.AuditEvent), make(chan error, 1)
+	close(c)
+	return c, e
+}
+
 func (d *DiscardAuditLog) UploadEncryptedRecording(ctx context.Context, sessionID string, parts iter.Seq2[[]byte, error]) error {
 	return nil
 }

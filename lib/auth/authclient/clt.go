@@ -343,6 +343,10 @@ func (c *Client) StreamSessionEvents(ctx context.Context, sessionID session.ID, 
 	return c.APIClient.StreamSessionEvents(ctx, string(sessionID), startIndex)
 }
 
+func (c *Client) StreamUploadEvents(ctx context.Context, sessionID session.ID, uploadID string, startIndex int64) (chan apievents.AuditEvent, chan error) {
+	return c.APIClient.StreamUploadEvents(ctx, string(sessionID), uploadID, startIndex)
+}
+
 // SearchEvents allows searching for audit events with pagination support.
 func (c *Client) SearchEvents(ctx context.Context, req events.SearchEventsRequest) ([]apievents.AuditEvent, string, error) {
 	events, lastKey, err := c.APIClient.SearchEvents(ctx, req.From, req.To, apidefaults.Namespace, req.EventTypes, req.Limit, req.Order, req.StartKey, req.Search)

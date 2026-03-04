@@ -1214,7 +1214,7 @@ type StreamEmitter interface {
 // interface for AuditLogger and SessionStreamer.
 type AuditLogSessionStreamer interface {
 	AuditLogger
-	SessionStreamer
+	UploadStreamer
 	EncryptedRecordingUploader
 }
 
@@ -1231,6 +1231,7 @@ type SessionStreamer interface {
 }
 
 type UploadStreamer interface {
+	SessionStreamer
 	StreamUploadEvents(ctx context.Context, sessionID session.ID, uploadID string, startIndex int64) (chan apievents.AuditEvent, chan error)
 }
 

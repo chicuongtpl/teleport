@@ -6611,6 +6611,13 @@ func (a *ServerWithRoles) ReplaceRemoteLocks(ctx context.Context, clusterName st
 // channel if one is encountered. Otherwise the event channel is closed when the stream ends.
 // The event channel is not closed on error to prevent race conditions in downstream select statements.
 func (a *ServerWithRoles) StreamSessionEvents(ctx context.Context, sessionID session.ID, startIndex int64) (chan apievents.AuditEvent, chan error) {
+	return a.StreamUploadEvents(ctx, sessionID, "", startIndex)
+}
+
+// StreamUploadEvents streams all events from a given session recording. An error is returned on the first
+// channel if one is encountered. Otherwise the event channel is closed when the stream ends.
+// The event channel is not closed on error to prevent race conditions in downstream select statements.
+func (a *ServerWithRoles) StreamUploadEvents(ctx context.Context, sessionID session.ID, uploadID string, startIndex int64) (chan apievents.AuditEvent, chan error) {
 	err := a.localServerAction()
 	isTeleportServer := err == nil
 
@@ -6618,6 +6625,12 @@ func (a *ServerWithRoles) StreamSessionEvents(ctx context.Context, sessionID ses
 	// happens we don't want to emit an event or check for permissions.
 	if isTeleportServer {
 		return a.alog.StreamSessionEvents(ctx, sessionID, startIndex)
+	}
+
+	if uploadID != "" {
+		c, e := make(chan apievents.AuditEvent), make(chan error, 1)
+		e <- trace.AccessDenied("")
+		return c, e
 	}
 
 	if err := a.actionForKindSession(ctx, sessionID); err != nil {
