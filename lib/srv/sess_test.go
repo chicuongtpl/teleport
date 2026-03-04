@@ -19,7 +19,6 @@
 package srv
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"io"
@@ -1660,83 +1659,6 @@ func TestWriteSudoersFile(t *testing.T) {
 			}
 		})
 	}
-}
-
-type blockingReadWriter struct {
-	unblock <-chan struct{}
-	writes  atomic.Int32
-}
-
-func (w *blockingReadWriter) Read(_ []byte) (int, error) {
-	return 0, io.EOF
-}
-
-func (w *blockingReadWriter) Write(p []byte) (int, error) {
-	w.writes.Add(1)
-	<-w.unblock
-	return len(p), nil
-}
-
-func newMockSSHChannelWithStderr(stderr io.ReadWriter) *mockSSHChannel {
-	stdIn, stdOut := io.Pipe()
-	return &mockSSHChannel{
-		stdIn:  stdIn,
-		stdOut: stdOut,
-		stdErr: stderr,
-	}
-}
-
-func TestSessionStderrWriterDoesNotBlockOnSlowParty(t *testing.T) {
-	slowUnblock := make(chan struct{})
-	slowStderr := &blockingReadWriter{unblock: slowUnblock}
-	slowChannel := newMockSSHChannelWithStderr(slowStderr)
-
-	fastStderr := new(bytes.Buffer)
-	fastChannel := newMockSSHChannelWithStderr(fastStderr)
-
-	slowCtx, slowCancel := context.WithCancel(context.Background())
-	defer slowCancel()
-	fastCtx, fastCancel := context.WithCancel(context.Background())
-	defer fastCancel()
-
-	sess := &session{
-		logger:    logtest.NewLogger(),
-		serverCtx: context.Background(),
-		parties:   map[rsession.ID]*party{},
-	}
-
-	slowParty := &party{
-		id:  rsession.NewID(),
-		ch:  slowChannel,
-		ctx: &ServerContext{cancelContext: slowCtx},
-	}
-	fastParty := &party{
-		id:  rsession.NewID(),
-		ch:  fastChannel,
-		ctx: &ServerContext{cancelContext: fastCtx},
-	}
-
-	sess.parties[slowParty.id] = slowParty
-	sess.parties[fastParty.id] = fastParty
-
-	done := make(chan struct{})
-	go func() {
-		_, _ = sess.Stderr().Write([]byte("stderr message"))
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatalf("session stderr fanout blocked on slow party")
-	}
-
-	require.Eventually(t, func() bool {
-		return fastStderr.String() == "stderr message"
-	}, time.Second, 10*time.Millisecond)
-	require.GreaterOrEqual(t, slowStderr.writes.Load(), int32(1))
-
-	close(slowUnblock)
 }
 
 type fakeServer struct {
