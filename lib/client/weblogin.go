@@ -361,9 +361,9 @@ type SSHLoginMFA struct {
 	SSHLogin
 	// MFAPromptConstructor is a custom MFA prompt constructor to use when prompting for MFA.
 	MFAPromptConstructor mfa.PromptConstructor
-	// SSOMFACeremonyConstructor is an optional SSO MFA ceremony constructor used
-	// only for Browser MFA during the login process.
-	SSOMFACeremonyConstructor mfa.SSOMFACeremonyConstructor
+	// MFACeremonyConstructor is an optional MFA ceremony constructor.
+	// Currently used for Browser MFA during the login process.
+	MFACeremonyConstructor mfa.MFACeremonyConstructor
 	// User is the login username.
 	User string
 	// Password is the login password.
@@ -728,8 +728,8 @@ func newMFALoginCeremony(clt *WebClient, login SSHLoginMFA) *mfa.Ceremony {
 			}
 			return chal, nil
 		},
-		PromptConstructor:         login.MFAPromptConstructor,
-		SSOMFACeremonyConstructor: login.SSOMFACeremonyConstructor,
+		PromptConstructor:      login.MFAPromptConstructor,
+		MFACeremonyConstructor: login.MFACeremonyConstructor,
 	}
 }
 

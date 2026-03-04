@@ -160,14 +160,14 @@ func TestMFACeremony_SSO(t *testing.T) {
 			}
 
 			return mfa.PromptFunc(func(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
-				if cfg.SSOMFACeremony == nil {
+				if cfg.MFACeremony == nil {
 					return nil, trace.BadParameter("expected sso mfa ceremony")
 				}
 
-				return cfg.SSOMFACeremony.Run(ctx, chal)
+				return cfg.MFACeremony.Run(ctx, chal)
 			})
 		},
-		SSOMFACeremonyConstructor: func(ctx context.Context) (mfa.SSOMFACeremony, error) {
+		MFACeremonyConstructor: func(ctx context.Context) (mfa.SSOMFACeremony, error) {
 			return &mockSSOMFACeremony{
 				clientCallbackURL: "client-redirect",
 				prompt: func(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {

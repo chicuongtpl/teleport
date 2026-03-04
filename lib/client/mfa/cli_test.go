@@ -411,7 +411,7 @@ Enter your security key PIN:
 			},
 			modifyPromptConfig: func(cfg *mfa.CLIPromptConfig) {
 				cfg.WebauthnSupported = false
-				cfg.SSOMFACeremony = nil
+				cfg.MFACeremony = nil
 			},
 			expectErr: trace.BadParameter("client does not support any available MFA methods [WEBAUTHN, SSO], see debug logs for details"),
 		},
@@ -521,7 +521,7 @@ Enter your security key PIN:
 				}
 			},
 			modifyPromptConfig: func(cfg *mfa.CLIPromptConfig) {
-				cfg.SSOMFACeremony = &mockSSOMFACeremony{
+				cfg.MFACeremony = &mockSSOMFACeremony{
 					runFunc: func(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
 						return &proto.MFAAuthenticateResponse{
 							Response: &proto.MFAAuthenticateResponse_Browser{
@@ -570,7 +570,7 @@ Enter your security key PIN:
 				}
 			}
 
-			cfg.SSOMFACeremony = &mockSSOMFACeremony{
+			cfg.MFACeremony = &mockSSOMFACeremony{
 				mfaResp: tc.expectResp,
 			}
 

@@ -54,8 +54,8 @@ type PromptConfig struct {
 	// Extensions are the challenge extensions used to create the prompt's challenge.
 	// Used to enrich certain prompts.
 	Extensions *mfav1.ChallengeExtensions
-	// SSOMFACeremony is an SSO MFA ceremony.
-	SSOMFACeremony SSOMFACeremony
+	// MFACeremony is an SSO or Browser MFA ceremony.
+	MFACeremony SSOMFACeremony
 }
 
 // DeviceDescriptor is a descriptor for a device, such as "registered".
@@ -123,6 +123,6 @@ func WithPromptChallengeExtensions(exts *mfav1.ChallengeExtensions) PromptOpt {
 // withSSOMFACeremony sets the SSO MFA ceremony for the MFA prompt.
 func withSSOMFACeremony(ssoMFACeremony SSOMFACeremony) PromptOpt {
 	return func(cfg *PromptConfig) {
-		cfg.SSOMFACeremony = ssoMFACeremony
+		cfg.MFACeremony = ssoMFACeremony
 	}
 }

@@ -104,7 +104,7 @@ func GetInitFunc(ccf tctlcfg.GlobalCLIFlags, cfg *servicecfg.Config) InitFunc {
 				PromptConfig: *promptCfg,
 			})
 		})
-		client.SetSSOMFACeremonyConstructor(func(ctx context.Context) (mfa.SSOMFACeremony, error) {
+		client.SetMFACeremonyConstructor(func(ctx context.Context) (mfa.SSOMFACeremony, error) {
 			rdConfig := sso.RedirectorConfig{
 				ProxyAddr: proxyAddr,
 			}

@@ -228,18 +228,18 @@ func (c *CLIPrompt) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 		slog.DebugContext(ctx, "Disabling WebAuthn: hardware device MFA not supported by your platform")
 	}
 
-	if state.promptSSO && c.cfg.SSOMFACeremony == nil {
+	if state.promptSSO && c.cfg.MFACeremony == nil {
 		state.promptSSO = false
 		slog.DebugContext(ctx, "Disabling SSO MFA: SSO MFA ceremony not available (this is likely a bug)")
 	}
 
-	if state.promptBrowser && (!c.cfg.WebauthnSupported || c.cfg.SSOMFACeremony == nil) {
+	if state.promptBrowser && (!c.cfg.WebauthnSupported || c.cfg.MFACeremony == nil) {
 		state.promptBrowser = false
 		slog.DebugContext(
 			ctx,
 			"Disabling Browser MFA: cluster needs to support Webauthn and client needs to support SSO MFA Ceremony",
 			"webauthn_supported", c.cfg.WebauthnSupported,
-			"sso_ceremony_available", c.cfg.SSOMFACeremony != nil,
+			"mfa_ceremony_available (if false, this is a bug)", c.cfg.MFACeremony != nil,
 		)
 	}
 
@@ -509,13 +509,13 @@ func (w *webauthnPromptWithOTP) PromptPIN() (string, error) {
 }
 
 func (c *CLIPrompt) promptSSO(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
-	resp, err := c.cfg.SSOMFACeremony.Run(ctx, chal)
+	resp, err := c.cfg.MFACeremony.Run(ctx, chal)
 	return resp, trace.Wrap(err)
 }
 
 func (c *CLIPrompt) promptBrowser(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
 	// promptBrowser is used when SSO MFA isn't available and uses the same
-	// redirector-based flow, so SSOMFACeremony is reused.
-	resp, err := c.cfg.SSOMFACeremony.Run(ctx, chal)
+	// redirector-based flow, so MFACeremony is reused.
+	resp, err := c.cfg.MFACeremony.Run(ctx, chal)
 	return resp, trace.Wrap(err)
 }

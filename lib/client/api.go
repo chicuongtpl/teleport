@@ -3246,7 +3246,7 @@ func (tc *TeleportClient) ConnectToCluster(ctx context.Context) (_ *ClusterClien
 		return nil, trace.NewAggregate(err, pclt.Close())
 	}
 	authClientCfg.MFAPromptConstructor = tc.NewMFAPrompt
-	authClientCfg.SSOMFACeremonyConstructor = tc.NewSSOMFACeremony
+	authClientCfg.MFACeremonyConstructor = tc.NewRedirectorMFACeremony
 
 	authClient, err := authclient.NewClient(authClientCfg)
 	if err != nil {
@@ -4229,11 +4229,11 @@ func (tc *TeleportClient) localLogin(ctx context.Context, keyRing *KeyRing, _ co
 	}
 
 	response, err := SSHAgentMFALogin(ctx, SSHLoginMFA{
-		SSHLogin:                  sshLogin,
-		User:                      tc.Username,
-		Password:                  password,
-		MFAPromptConstructor:      tc.NewMFAPrompt,
-		SSOMFACeremonyConstructor: tc.NewSSOMFACeremony,
+		SSHLogin:               sshLogin,
+		User:                   tc.Username,
+		Password:               password,
+		MFAPromptConstructor:   tc.NewMFAPrompt,
+		MFACeremonyConstructor: tc.NewRedirectorMFACeremony,
 	})
 	return response, trace.Wrap(err)
 }
@@ -5391,10 +5391,10 @@ func (tc *TeleportClient) NewKubernetesServiceClient(ctx context.Context, cluste
 		Credentials: []client.Credentials{
 			client.LoadTLS(tlsConfig),
 		},
-		ALPNConnUpgradeRequired:   tc.TLSRoutingConnUpgradeRequired,
-		InsecureAddressDiscovery:  tc.InsecureSkipVerify,
-		MFAPromptConstructor:      tc.NewMFAPrompt,
-		SSOMFACeremonyConstructor: tc.NewSSOMFACeremony,
+		ALPNConnUpgradeRequired:  tc.TLSRoutingConnUpgradeRequired,
+		InsecureAddressDiscovery: tc.InsecureSkipVerify,
+		MFAPromptConstructor:     tc.NewMFAPrompt,
+		MFACeremonyConstructor:   tc.NewRedirectorMFACeremony,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)
