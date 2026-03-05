@@ -228,7 +228,7 @@ func TestBrowserMFAChallengeCreation(t *testing.T) {
 					Username:       env.webauthnUser.GetName(),
 					ConnectorID:    constants.BrowserMFA,
 					ConnectorType:  constants.BrowserMFA,
-					TshRedirectURL: redirectURL,
+					TSHRedirectURL: redirectURL,
 					ChallengeExtensions: &mfatypes.ChallengeExtensions{
 						Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
 					},

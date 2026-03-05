@@ -3085,9 +3085,7 @@ func (h *Handler) mfaLoginBegin(w http.ResponseWriter, r *http.Request, p httpro
 			Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_LOGIN,
 		}
 
-		if req.BrowserMFATSHRedirectURL != "" {
-			mfaReq.BrowserMFATSHRedirectURL = req.BrowserMFATSHRedirectURL
-		}
+		mfaReq.BrowserMFATSHRedirectURL = req.BrowserMFATSHRedirectURL
 	}
 
 	mfaChallenge, err := h.auth.proxyClient.CreateAuthenticateChallenge(r.Context(), mfaReq)

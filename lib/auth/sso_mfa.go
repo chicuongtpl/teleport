@@ -179,7 +179,7 @@ func (a *Server) upsertMFASession(ctx context.Context, params upsertMFASessionPa
 		RequestID:      params.sessionID,
 		ConnectorID:    params.connectorID,
 		ConnectorType:  params.connectorType,
-		TshRedirectURL: params.tshRedirectURL,
+		TSHRedirectURL: params.tshRedirectURL,
 		ChallengeExtensions: &mfatypes.ChallengeExtensions{
 			Scope:      params.ext.Scope,
 			AllowReuse: params.ext.AllowReuse,

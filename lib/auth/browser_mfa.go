@@ -35,6 +35,10 @@ func (a *Server) BeginBrowserMFAChallenge(ctx context.Context, params mfatypes.B
 		return nil, trace.Wrap(err, InvalidClientRedirectErrorMessage)
 	}
 
+	// The proxy address is likely already supplied by the SSO MFA portion of the
+	// challenge request in mfaAuthChallenge, so use it if available. Browser
+	// MFA doesn't require the client to send the proxy address, so if it isn't
+	// already set, get it from the server.
 	proxyAddr := params.ProxyAddress
 	if proxyAddr == "" {
 		proxyAddr = a.getProxyPublicAddr(ctx)

@@ -7999,6 +7999,7 @@ func (a *Server) mfaAuthChallenge(ctx context.Context, user, ssoClientRedirectUR
 	enableTOTP := apref.IsSecondFactorTOTPAllowed()
 	enableWebauthn := apref.IsSecondFactorWebauthnAllowed()
 	enableSSO := apref.IsSecondFactorSSOAllowed()
+	enableBrowserMFA := apref.GetAllowBrowserAuthentication()
 
 	// Fetch configurations. The IsSecondFactor*Allowed calls above already
 	// include the necessary checks of config empty, disabled, etc.
@@ -8112,24 +8113,17 @@ func (a *Server) mfaAuthChallenge(ctx context.Context, user, ssoClientRedirectUR
 	// If the user has a WebAuthn device and no SSO MFA configured, return a Browser
 	// MFA challenge. This challenge is useful in cases where a user only has a
 	// browser-associated WebAuthn device, but is trying to MFA via a CLI tool (tsh, tctl etc.)
-	if groupedDevs.Browser != nil && browserMFATSHRedirectURL != "" {
-		authPref, err := a.GetAuthPreference(ctx)
-		if err != nil {
+	if enableBrowserMFA && groupedDevs.Browser != nil && browserMFATSHRedirectURL != "" {
+		if challenge.BrowserMFAChallenge, err = a.BeginBrowserMFAChallenge(
+			ctx,
+			mfatypes.BeginBrowserMFAChallengeParams{
+				User:                     user,
+				BrowserMFATSHRedirectURL: browserMFATSHRedirectURL,
+				ProxyAddress:             proxyAddress,
+				Ext:                      challengeExtensions,
+			},
+		); err != nil {
 			return nil, trace.Wrap(err)
-		}
-
-		if authPref.GetAllowBrowserAuthentication() {
-			if challenge.BrowserMFAChallenge, err = a.BeginBrowserMFAChallenge(
-				ctx,
-				mfatypes.BeginBrowserMFAChallengeParams{
-					User:                     user,
-					BrowserMFATSHRedirectURL: browserMFATSHRedirectURL,
-					ProxyAddress:             proxyAddress,
-					Ext:                      challengeExtensions,
-				},
-			); err != nil {
-				return nil, trace.Wrap(err)
-			}
 		}
 	}
 
