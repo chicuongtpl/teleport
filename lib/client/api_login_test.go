@@ -150,6 +150,7 @@ func TestTeleportClient_Login_local(t *testing.T) {
 		authConnector           string
 		allowStdinHijack        bool
 		preferOTP               bool
+		preferBrowser           bool
 		hasTouchIDCredentials   bool
 		authenticatorAttachment wancli.AuthenticatorAttachment
 		scope                   string
@@ -315,6 +316,7 @@ func TestTeleportClient_Login_local(t *testing.T) {
 			tc.AllowStdinHijack = test.allowStdinHijack
 			tc.AuthConnector = test.authConnector
 			tc.PreferOTP = test.preferOTP
+			tc.PreferBrowser = test.preferBrowser
 			tc.AuthenticatorAttachment = test.authenticatorAttachment
 			inputReader := test.makeInputReader(password, otpKey, clock)
 			tc.StdinFunc = func() prompt.StdinReader { return inputReader }
@@ -334,6 +336,16 @@ func TestTeleportClient_Login_local(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
+
+			// Only enable BrowserAuthentication for tests that explicitly request it
+			if test.preferBrowser != false {
+				authServer := sa.Auth.GetAuthServer()
+				authPref, err := authServer.GetAuthPreference(ctx)
+				require.NoError(t, err)
+				authPref.SetAllowBrowserAuthentication(true)
+				_, err = authServer.UpsertAuthPreference(ctx, authPref)
+				require.NoError(t, err)
+			}
 
 			// Test.
 			clock.Advance(30 * time.Second)
@@ -599,7 +611,9 @@ func newStandaloneTeleport(t *testing.T, clock clockwork.Clock) *standaloneBundl
 		Webauthn: &types.Webauthn{
 			RPID: "localhost",
 		},
-		SignatureAlgorithmSuite: types.SignatureAlgorithmSuite_SIGNATURE_ALGORITHM_SUITE_BALANCED_V1,
+		// Disable by default and enable for tests that require it
+		AllowBrowserAuthentication: types.NewBoolOption(false),
+		SignatureAlgorithmSuite:    types.SignatureAlgorithmSuite_SIGNATURE_ALGORITHM_SUITE_BALANCED_V1,
 	})
 	require.NoError(t, err)
 	cfg.Auth.BootstrapResources = []types.Resource{role, user}
@@ -869,3 +883,24 @@ func TestRetryWithRelogin(t *testing.T) {
 		require.Equal(t, 2, calledTimes)
 	})
 }
+
+type mockBrowserMFACeremony struct {
+	runFunc func(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error)
+}
+
+func (m *mockBrowserMFACeremony) GetClientCallbackURL() string {
+	return "http://localhost:3080/callback"
+}
+
+func (m *mockBrowserMFACeremony) GetProxyAddress() string {
+	return "localhost"
+}
+
+func (m *mockBrowserMFACeremony) Run(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+	if m.runFunc != nil {
+		return m.runFunc(ctx, chal)
+	}
+	return nil, errors.New("runFunc not set")
+}
+
+func (m *mockBrowserMFACeremony) Close() {}

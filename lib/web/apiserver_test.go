@@ -631,6 +631,13 @@ func newWebSuiteWithConfig(t *testing.T, cfg webSuiteConfig) *WebSuite {
 
 	proxyAddr := utils.MustParseAddr(s.proxy.Addr())
 
+	// Set the proxy's public address so that browser MFA flows can
+	// determine the proxy address from the backend.
+	for srv := range clientutils.Resources(ctx, s.server.Auth().ListProxyServers) {
+		srv.SetPublicAddrs([]string{s.webServer.Listener.Addr().String()})
+		require.NoError(t, s.server.Auth().UpsertProxy(ctx, srv))
+	}
+
 	addr := utils.MustParseAddr(s.webServer.Listener.Addr().String())
 	handler.handler.cfg.ProxyWebAddr = *addr
 	handler.handler.cfg.ProxySSHAddr = *proxyAddr
