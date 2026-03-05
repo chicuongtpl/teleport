@@ -574,3 +574,7 @@ func (m *MockUploader) CompleteUpload(ctx context.Context, upload events.StreamU
 
 	return nil
 }
+
+func (m *MockUploader) RecordingExists(ctx context.Context, sessionID session.ID, uploadID string) bool {
+	return false
+}

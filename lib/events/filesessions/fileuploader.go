@@ -249,7 +249,7 @@ func uploadFile(path string, reader io.Reader, opts ...fileUploadOption) (string
 }
 
 func (l *Handler) recordingPath(upload events.StreamUpload) string {
-	if upload.ID != "" {
+	if upload.Temporary {
 		return filepath.Join(l.uploadRootPath(upload), string(upload.SessionID)+".temp"+tarExt)
 	}
 	return filepath.Join(l.Directory, string(upload.SessionID)+tarExt)
