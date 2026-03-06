@@ -20,6 +20,9 @@ package services
 
 import "github.com/gravitational/teleport/lib/auth/mfatypes"
 
+// TODO(danielashare): Remove alias once `e` no longer references it
+type SSOMFASessionData = MFASessionData
+
 // MFASessionData is MFA Session data for SSO MFA or Browser MFA.
 type MFASessionData struct {
 	// RequestID is the ID of the corresponding Auth request, which is used to
