@@ -74,15 +74,14 @@ func (a *Server) BeginSSOMFAChallenge(ctx context.Context, params mfatypes.Begin
 	}
 
 	if err := a.upsertMFASession(ctx, upsertMFASessionParams{
-		user:           params.User,
-		sessionID:      chal.RequestId,
-		connectorID:    params.SSO.ConnectorId,
-		connectorType:  params.SSO.ConnectorType,
-		tshRedirectURL: "", // Only used by Browser MFA
-		ext:            params.Ext,
-		sip:            params.SIP,
-		sourceCluster:  params.SourceCluster,
-		targetCluster:  params.TargetCluster,
+		user:          params.User,
+		sessionID:     chal.RequestId,
+		connectorID:   params.SSO.ConnectorId,
+		connectorType: params.SSO.ConnectorType,
+		ext:           params.Ext,
+		sip:           params.SIP,
+		sourceCluster: params.SourceCluster,
+		targetCluster: params.TargetCluster,
 	}); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -174,7 +173,7 @@ type upsertMFASessionParams struct {
 // sessionID, connector details, and challenge extensions. This is used by both
 // SSO MFA and Browser MFA.
 func (a *Server) upsertMFASession(ctx context.Context, params upsertMFASessionParams) error {
-	data := &services.SSOMFASessionData{
+	data := &services.MFASessionData{
 		Username:       params.user,
 		RequestID:      params.sessionID,
 		ConnectorID:    params.connectorID,
@@ -198,7 +197,7 @@ func (a *Server) upsertMFASession(ctx context.Context, params upsertMFASessionPa
 }
 
 // UpsertSSOMFASessionWithToken upserts the given SSO MFA session with a random mfa token.
-func (a *Server) UpsertSSOMFASessionWithToken(ctx context.Context, sd *services.SSOMFASessionData) (token string, err error) {
+func (a *Server) UpsertSSOMFASessionWithToken(ctx context.Context, sd *services.MFASessionData) (token string, err error) {
 	sd.Token, err = utils.CryptoRandomHex(defaults.TokenLenBytes)
 	if err != nil {
 		return "", trace.Wrap(err)
@@ -212,7 +211,7 @@ func (a *Server) UpsertSSOMFASessionWithToken(ctx context.Context, sd *services.
 }
 
 // GetSSOMFASession returns the SSO MFA session for the given username and sessionID.
-func (a *Server) GetSSOMFASession(ctx context.Context, sessionID string) (*services.SSOMFASessionData, error) {
+func (a *Server) GetSSOMFASession(ctx context.Context, sessionID string) (*services.MFASessionData, error) {
 	sd, err := a.GetSSOMFASessionData(ctx, sessionID)
 	if err != nil {
 		return nil, trace.Wrap(err)

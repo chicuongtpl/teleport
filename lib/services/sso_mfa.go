@@ -20,9 +20,9 @@ package services
 
 import "github.com/gravitational/teleport/lib/auth/mfatypes"
 
-// SSOMFASessionData SSO MFA Session data.
-type SSOMFASessionData struct {
-	// RequestID is the ID of the corresponding SSO Auth request, which is used to
+// MFASessionData is MFA Session data for SSO MFA or Browser MFA.
+type MFASessionData struct {
+	// RequestID is the ID of the corresponding Auth request, which is used to
 	// identity this session.
 	RequestID string `json:"request_id,omitempty"`
 	// Username is the Teleport username.
@@ -41,6 +41,7 @@ type SSOMFASessionData struct {
 	SourceCluster string `json:"source_cluster,omitempty"`
 	// TargetCluster is the optional cluster where the authentication is targeted.
 	TargetCluster string `json:"target_cluster,omitempty"`
-	// TSHRedirectURL is the redirect URL used to return a WebAuthn response back to tsh
+	// TSHRedirectURL is the redirect URL used to return a WebAuthn response back to tsh.
+	// This is used exclusively by Browser MFA.
 	TSHRedirectURL string `json:"tsh_redirect_url,omitempty"`
 }

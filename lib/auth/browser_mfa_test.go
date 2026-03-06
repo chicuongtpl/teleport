@@ -46,7 +46,7 @@ type testEnv struct {
 
 func newBrowserMFATestEnv(t *testing.T) testEnv {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	fakeClock := clockwork.NewFakeClock()
 	testServer, err := authtest.NewTestServer(authtest.ServerConfig{
@@ -223,7 +223,7 @@ func TestBrowserMFAChallengeCreation(t *testing.T) {
 				// Browser MFA reuses the SSO MFA session data storage.
 				sd, err := a.GetSSOMFASessionData(ctx, chal.BrowserMFAChallenge.RequestId)
 				require.NoError(t, err)
-				assert.Equal(t, &services.SSOMFASessionData{
+				assert.Equal(t, &services.MFASessionData{
 					RequestID:      chal.BrowserMFAChallenge.RequestId,
 					Username:       env.webauthnUser.GetName(),
 					ConnectorID:    constants.BrowserMFA,

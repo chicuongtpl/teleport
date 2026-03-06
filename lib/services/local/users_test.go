@@ -1753,7 +1753,7 @@ func TestIdentityService_SSOMFASessionDataCRUD(t *testing.T) {
 	identity := newIdentityService(t, clockwork.NewFakeClock())
 
 	// Verify create.
-	sd := &services.SSOMFASessionData{
+	sd := &services.MFASessionData{
 		RequestID:     "request",
 		Username:      "alice",
 		ConnectorID:   "saml",

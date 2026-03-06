@@ -271,10 +271,10 @@ type Identity interface {
 	// UpsertSSOMFASessionData creates or updates SSO MFA session data in
 	// storage, for the purpose of later verifying an MFA authentication attempt.
 	// SSO MFA session data is expected to expire according to backend settings.
-	UpsertSSOMFASessionData(ctx context.Context, sd *SSOMFASessionData) error
+	UpsertSSOMFASessionData(ctx context.Context, sd *MFASessionData) error
 
 	// GetSSOMFASessionData retrieves SSO MFA session data by ID.
-	GetSSOMFASessionData(ctx context.Context, sessionID string) (*SSOMFASessionData, error)
+	GetSSOMFASessionData(ctx context.Context, sessionID string) (*MFASessionData, error)
 
 	// DeleteSSOMFASessionData deletes SSO MFA session data by ID.
 	DeleteSSOMFASessionData(ctx context.Context, sessionID string) error
