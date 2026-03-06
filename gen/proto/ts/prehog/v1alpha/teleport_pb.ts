@@ -4699,7 +4699,7 @@ export enum LicenseLimit {
     /**
      * LICENSE_LIMIT_DEVICE_TRUST_TEAM_JAMF is emitted if license does not
      * allow Jamf integration (e.g. Team Plan)
-     * DEPRECATED: No longer emitted.
+     * DEPRECATED: Device trust and its MDM integrations are no longer limited for Enterprise/Cloud.
      *
      * @deprecated
      * @generated from protobuf enum value: LICENSE_LIMIT_DEVICE_TRUST_TEAM_JAMF = 1 [deprecated = true];
@@ -4708,7 +4708,7 @@ export enum LicenseLimit {
     /**
      * LICENSE_LIMIT_DEVICE_TRUST_TEAM_USAGE is emitted when allowed enrolled device
      * limit is reached
-     * DEPRECATED: No longer emitted.
+     * DEPRECATED: Device trust usage is no longer limited for Enterprise/Cloud.
      *
      * @deprecated
      * @generated from protobuf enum value: LICENSE_LIMIT_DEVICE_TRUST_TEAM_USAGE = 2 [deprecated = true];

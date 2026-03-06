@@ -28,8 +28,6 @@ import {
   H1,
   H2,
   H3,
-  P1,
-  P2,
   ResourceIcon,
   Text,
 } from 'design';
@@ -46,7 +44,6 @@ import {
   FeatureContainer,
   FeatureSlider,
 } from 'shared/components/EmptyState/EmptyState';
-import { pluralize } from 'shared/utils/text';
 
 import {
   renderDescCell,
