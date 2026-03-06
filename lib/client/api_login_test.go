@@ -883,24 +883,3 @@ func TestRetryWithRelogin(t *testing.T) {
 		require.Equal(t, 2, calledTimes)
 	})
 }
-
-type mockBrowserMFACeremony struct {
-	runFunc func(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error)
-}
-
-func (m *mockBrowserMFACeremony) GetClientCallbackURL() string {
-	return "http://localhost:3080/callback"
-}
-
-func (m *mockBrowserMFACeremony) GetProxyAddress() string {
-	return "localhost"
-}
-
-func (m *mockBrowserMFACeremony) Run(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
-	if m.runFunc != nil {
-		return m.runFunc(ctx, chal)
-	}
-	return nil, errors.New("runFunc not set")
-}
-
-func (m *mockBrowserMFACeremony) Close() {}
