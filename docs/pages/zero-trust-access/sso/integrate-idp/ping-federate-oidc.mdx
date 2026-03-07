@@ -9,8 +9,6 @@ tags:
   - privileged-access
 ---
 
-{/* lint ignore page-structure remark-lint */} 
-
 This guide explains how to configure PingFederate as a single sign-on
 (SSO) identity provider for Teleport using **OpenID Connect** (OIDC).
 
@@ -19,6 +17,8 @@ provider. When a user authenticates, Teleport redirects them to
 PingFederate. PingFederate authenticates the user and returns an ID
 token containing claims. Teleport evaluates the claims against its
 `claims_to_roles` mapping and assigns the appropriate roles.
+
+ {/* lint ignore page-structure remark-lint */}
 
 ## Prerequisites
 
