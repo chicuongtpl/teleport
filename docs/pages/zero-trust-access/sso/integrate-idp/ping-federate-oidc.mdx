@@ -9,6 +9,8 @@ tags:
   - privileged-access
 ---
 
+{/* lint ignore page-structure remark-lint */} 
+
 This guide explains how to configure PingFederate as a single sign-on
 (SSO) identity provider for Teleport using **OpenID Connect** (OIDC).
 
@@ -323,7 +325,7 @@ $ tsh status
     }
   }
   ```
-  
+
   Here are some troubleshooting tips:
   - Confirm that `sub`, `email`, and `groups` claims appear in the audit event.
   - Verify the claim names match your connector configuration.
