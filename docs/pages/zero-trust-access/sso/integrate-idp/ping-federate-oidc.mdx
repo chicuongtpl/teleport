@@ -18,8 +18,6 @@ PingFederate. PingFederate authenticates the user and returns an ID
 token containing claims. Teleport evaluates the claims against its
 `claims_to_roles` mapping and assigns the appropriate roles.
 
-{/* lint ignore page-structure remark-lint */}
-
 ## Prerequisites
 
 - A running Teleport Enterprise cluster. OIDC connectors require an
@@ -27,7 +25,7 @@ token containing claims. Teleport evaluates the claims against its
 - Administrative access to PingFederate.
 - Administrative access to Teleport (`tctl` or the Web UI).
 - The `tctl` and `tsh` client tools installed on your workstation. For
-  instructions, read [Installation](../../../installation/installation.mdx).
+  instructions, read [Installation](/docs/installation.mdx).
 
 ## Step 1/7. Create an OIDC client in PingFederate
 
@@ -58,6 +56,25 @@ creation. Record the secret in a safe location before continuing.
   - Ensure the **Authorization Code** grant type is enabled.
   - Confirm the **openid** scope is enabled.
   - Verify the client status is **active** in PingFederate.
+</Checkpoint>
+
+<Checkpoint
+  title="Verify redirect URI configuration"
+  description="Ensure PingFederate and Teleport redirect URIs match exactly."
+>
+  The expected format is `https://<teleport-domain>/v1/webapi/oidc/callback`.
+  Here are some troubleshooting tips:
+  - Check for trailing slash mismatches.
+  - Check for HTTP versus HTTPS mismatches.
+</Checkpoint>
+
+<Checkpoint
+  title="Verify client credentials"
+  description="Ensure client credentials configured in Teleport match PingFederate."
+>
+  Here are some troubleshooting tips:
+  - Confirm the client ID in the connector matches PingFederate.
+  - Regenerate the client secret in PingFederate if needed, update the connector YAML, and reapply it with `tctl create -f pingfederate-connector.yaml`.
 </Checkpoint>
 
 ## Step 2/7. Configure scopes in PingFederate
@@ -221,67 +238,6 @@ pasting the YAML content.
   - Ensure `prompt` is set to `none`.
 </Checkpoint>
 
-## Step 7/7. Test authentication
-
-Log in to Teleport using the PingFederate connector:
-
-```code
-$ tsh login --auth=pingfederate
-```
-
-Verify your session:
-
-```code
-$ tsh status
-```
-
-<Checkpoint
-  title="Verify successful login"
-  description="Confirm the user is authenticated and assigned the correct Teleport roles."
->
-  Here are some troubleshooting tips:
-  - Ensure the username in `tsh status` output is correct.
-  - Confirm the expected roles appear in the output.
-  - Verify the cluster connection succeeds.
-</Checkpoint>
-
-## Troubleshooting
-
-<Checkpoint
-  title="Inspect OIDC claims received by Teleport"
-  description="Verify that Teleport receives expected user attributes from PingFederate."
->
-  When an SSO login occurs, Teleport records the received claims in the
-  audit log. View login events with the following command:
-
-  ```code
-  $ tctl audit ls | grep login
-  ```
-
-  An example audit event looks like the following:
-
-  ```json
-  {
-    "event": "user.login",
-    "method": "oidc",
-    "user": "alice@example.com",
-    "attributes": {
-      "sub": "alice@example.com",
-      "email": "alice@example.com",
-      "groups": [
-        "developers",
-        "platform"
-      ]
-    }
-  }
-  ```
-
-  Here are some troubleshooting tips:
-  - Confirm that `sub`, `email`, and `groups` claims appear in the audit event.
-  - Verify the claim names match your connector configuration.
-  - Ensure the attributes are present in the ID token, not only in the userinfo endpoint response.
-</Checkpoint>
-
 <Checkpoint
   title="Resolve invalid prompt parameter errors"
   description="PingFederate may reject Teleport's default prompt setting."
@@ -315,22 +271,62 @@ $ tsh status
   - Confirm the Teleport role referenced in the connector exists in the cluster.
 </Checkpoint>
 
+## Step 7/7. Test authentication
+
+Log in to Teleport using the PingFederate connector:
+
+```code
+$ tsh login --auth=pingfederate
+```
+
+Verify your session:
+
+```code
+$ tsh status
+```
+
 <Checkpoint
-  title="Verify redirect URI configuration"
-  description="Ensure PingFederate and Teleport redirect URIs match exactly."
+  title="Verify successful login"
+  description="Confirm the user is authenticated and assigned the correct Teleport roles."
 >
-  The expected format is `https://<teleport-domain>/v1/webapi/oidc/callback`.
   Here are some troubleshooting tips:
-  - Check for trailing slash mismatches.
-  - Check for HTTP versus HTTPS mismatches.
+  - Ensure the username in `tsh status` output is correct.
+  - Confirm the expected roles appear in the output.
+  - Verify the cluster connection succeeds.
 </Checkpoint>
 
 <Checkpoint
-  title="Verify client credentials"
-  description="Ensure client credentials configured in Teleport match PingFederate."
+  title="Inspect OIDC claims received by Teleport"
+  description="Verify that Teleport receives expected user attributes from PingFederate."
 >
+  When an SSO login occurs, Teleport records the received claims in the
+  audit log. View login events with the following command:
+
+  ```code
+  $ tctl audit ls | grep login
+  ```
+
+  An example audit event looks like the following:
+
+  ```json
+  {
+    "event": "user.login",
+    "method": "oidc",
+    "user": "alice@example.com",
+    "attributes": {
+      "sub": "alice@example.com",
+      "email": "alice@example.com",
+      "groups": [
+        "developers",
+        "platform"
+      ]
+    }
+  }
+  ```
+  
   Here are some troubleshooting tips:
-  - Confirm the client ID in the connector matches PingFederate.
-  - Regenerate the client secret in PingFederate if needed, update the connector YAML, and reapply it with `tctl create -f pingfederate-connector.yaml`.
+  - Confirm that `sub`, `email`, and `groups` claims appear in the audit event.
+  - Verify the claim names match your connector configuration.
+  - Ensure the attributes are present in the ID token, not only in the userinfo endpoint response.
 </Checkpoint>
 
