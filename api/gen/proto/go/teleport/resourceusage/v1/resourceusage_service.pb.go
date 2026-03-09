@@ -81,6 +81,9 @@ type GetUsageResponse struct {
 	// disconsidered for those accounts.
 	AccountUsageType AccountUsageType `protobuf:"varint,2,opt,name=account_usage_type,json=accountUsageType,proto3,enum=teleport.resourceusage.v1.AccountUsageType" json:"account_usage_type,omitempty"`
 	// DevicesUsage contains limits for trusted devices / Device Trust.
+	// DEPRECATED: Device trust usage is no longer limited for Enterprise/Cloud.
+	//
+	// Deprecated: Marked as deprecated in teleport/resourceusage/v1/resourceusage_service.proto.
 	DevicesUsage  *DevicesUsage `protobuf:"bytes,3,opt,name=devices_usage,json=devicesUsage,proto3" json:"devices_usage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -130,6 +133,7 @@ func (x *GetUsageResponse) GetAccountUsageType() AccountUsageType {
 	return AccountUsageType_ACCOUNT_USAGE_TYPE_UNSPECIFIED
 }
 
+// Deprecated: Marked as deprecated in teleport/resourceusage/v1/resourceusage_service.proto.
 func (x *GetUsageResponse) GetDevicesUsage() *DevicesUsage {
 	if x != nil {
 		return x.DevicesUsage
@@ -142,11 +146,11 @@ var File_teleport_resourceusage_v1_resourceusage_service_proto protoreflect.File
 const file_teleport_resourceusage_v1_resourceusage_service_proto_rawDesc = "" +
 	"\n" +
 	"5teleport/resourceusage/v1/resourceusage_service.proto\x12\x19teleport.resourceusage.v1\x1a/teleport/resourceusage/v1/access_requests.proto\x1a2teleport/resourceusage/v1/account_usage_type.proto\x1a,teleport/resourceusage/v1/device_trust.proto\"\x11\n" +
-	"\x0fGetUsageRequest\"\x94\x02\n" +
+	"\x0fGetUsageRequest\"\x98\x02\n" +
 	"\x10GetUsageResponse\x12W\n" +
 	"\x0faccess_requests\x18\x01 \x01(\v2..teleport.resourceusage.v1.AccessRequestsUsageR\x0eaccessRequests\x12Y\n" +
-	"\x12account_usage_type\x18\x02 \x01(\x0e2+.teleport.resourceusage.v1.AccountUsageTypeR\x10accountUsageType\x12L\n" +
-	"\rdevices_usage\x18\x03 \x01(\v2'.teleport.resourceusage.v1.DevicesUsageR\fdevicesUsage2{\n" +
+	"\x12account_usage_type\x18\x02 \x01(\x0e2+.teleport.resourceusage.v1.AccountUsageTypeR\x10accountUsageType\x12P\n" +
+	"\rdevices_usage\x18\x03 \x01(\v2'.teleport.resourceusage.v1.DevicesUsageB\x02\x18\x01R\fdevicesUsage2{\n" +
 	"\x14ResourceUsageService\x12c\n" +
 	"\bGetUsage\x12*.teleport.resourceusage.v1.GetUsageRequest\x1a+.teleport.resourceusage.v1.GetUsageResponseB^Z\\github.com/gravitational/teleport/api/gen/proto/go/teleport/resourceusage/v1;resourceusagev1b\x06proto3"
 

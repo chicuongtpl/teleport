@@ -41,5 +41,6 @@ message GetUsageResponse {
   AccountUsageType account_usage_type = 2;
 
   // DevicesUsage contains limits for trusted devices / Device Trust.
-  DevicesUsage devices_usage = 3;
+  // DEPRECATED: Device trust usage is no longer limited for Enterprise/Cloud.
+  DevicesUsage devices_usage = 3 [deprecated = true];
 }
