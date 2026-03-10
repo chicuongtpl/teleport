@@ -4518,15 +4518,16 @@ func convertSSHExitCode(tc *client.TeleportClient, err error) error {
 			return trace.Wrap(err)
 		}
 
-		// If we have a non ssh.ExitError, or an ssh.ExitError with a custom msg/signal field,
-		// print the error before we lose it when returning the exitCodeError.
+		// If we get a basic SSH exit error with no unexpected msg or signal,
+		// convert it to an exitCodeError and return.
 		var sshExitErr *ssh.ExitError
-		if err != nil && (!errors.As(err, &sshExitErr) || sshExitErr.Msg() != "" || sshExitErr.Signal() != "") {
-			fmt.Fprintln(tc.Stderr, utils.UserMessageFromError(err))
+		if errors.As(err, &sshExitErr) && sshExitErr.Msg() == "" && sshExitErr.Signal() == "" {
+			return trace.Wrap(&common.ExitCodeError{Code: status})
 		}
 
-		err = &common.ExitCodeError{Code: status}
-		return trace.Wrap(err)
+		// For unexpected errors, print the error message before converting to an exitCodeError.
+		fmt.Fprintln(tc.Stderr, utils.UserMessageFromError(err))
+		return trace.Wrap(&common.ExitCodeError{Code: status})
 	}
 	return trace.Wrap(err)
 }

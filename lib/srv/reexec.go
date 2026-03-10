@@ -1290,15 +1290,15 @@ func buildCommand(c *ExecCommand, localUser *user.User, pamEnvironment []string)
 
 	// Pass extra files for SFTP to grandchild.
 	if c.RequestType == sshutils.SubsystemRequest && c.Command == teleport.SFTPSubsystem {
-		out := os.NewFile(FileTransferOutFile, strconv.Itoa(int(FileTransferOutFile)))
+		out := os.NewFile(FileTransferOutFile, "FileTransferOutFile")
 		if out == nil {
 			return nil, trace.NotFound("read pipe out file not found")
 		}
-		in := os.NewFile(FileTransferInFile, strconv.Itoa(int(FileTransferInFile)))
+		in := os.NewFile(FileTransferInFile, "FileTransferInFile")
 		if in == nil {
 			return nil, trace.NotFound("read pipe in file not found")
 		}
-		audit := os.NewFile(AuditInFile, strconv.Itoa(int(AuditInFile)))
+		audit := os.NewFile(AuditInFile, "AuditInFile")
 		if audit == nil {
 			return nil, trace.NotFound("read pipe audit file not found")
 		}
