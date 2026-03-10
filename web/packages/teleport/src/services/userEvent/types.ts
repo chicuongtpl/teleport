@@ -310,7 +310,7 @@ export type UserEvent<E = CaptureEvent> = {
   alert?: string;
 };
 
-type UserEventWithData<E, D> = UserEvent<E> & {
+export type UserEventWithData<E, D> = UserEvent<E> & {
   eventData: D;
 };
 
