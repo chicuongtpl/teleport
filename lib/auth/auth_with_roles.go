@@ -2926,7 +2926,6 @@ func (a *ServerWithRoles) ListWebTokens(ctx context.Context, limit int, start st
 	}
 
 	return tokens, next, nil
-
 }
 
 // DeleteWebToken removes the web token specified with req.
@@ -3778,7 +3777,21 @@ func (a *ServerWithRoles) generateUserCerts(ctx context.Context, req proto.UserC
 		}
 	}
 
+	if req.Usage == proto.UserCertsRequest_AccessGraphAPI {
+		if !modules.GetModules().Features().GetEntitlement(entitlements.Policy).Enabled {
+			return nil, trace.AccessDenied("access graph requires a Teleport Policy license")
+		}
+		if err := checker.CheckAccessToRule(
+			&services.Context{
+				User: a.context.User,
+			}, apidefaults.Namespace, types.KindAccessGraph, types.VerbRead,
+		); err != nil {
+			return nil, trace.Wrap(err)
+		}
+	}
+
 	var appSessionID string
+	var webSessionID string
 	if req.RouteToApp.Name != "" {
 		// Create a new app session using the same cert request. The user certs
 		// generated below will be linked to this session by the session ID.
@@ -3818,6 +3831,24 @@ func (a *ServerWithRoles) generateUserCerts(ctx context.Context, req proto.UserC
 			return nil, trace.Wrap(err)
 		}
 		appSessionID = ws.GetName()
+	} else if req.Usage == proto.UserCertsRequest_AccessGraphAPI {
+		// If usage is AccessGraphAPI, we need to create a web session
+		// so that the proxy can create a client to auth to report usage metrics.
+		// The user won't have the cookie so he could not use it.
+		wsSession, err := a.authServer.CreateWebSessionFromReq(ctx, NewWebSessionRequest{
+			User:             req.Username,
+			SessionTTL:       req.Expires.Sub(a.authServer.GetClock().Now()),
+			LoginIP:          a.context.Identity.GetIdentity().LoginIP,
+			Roles:            accessInfo.Roles,
+			Traits:           accessInfo.Traits,
+			LoginTime:        a.authServer.clock.Now().UTC(),
+			AccessRequests:   req.AccessRequests,
+			AttestWebSession: true,
+		})
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		webSessionID = wsSession.GetName()
 	}
 
 	// Generate certificate, note that the roles TTL will be ignored because
@@ -3845,6 +3876,7 @@ func (a *ServerWithRoles) generateUserCerts(ctx context.Context, req proto.UserC
 		appPublicAddr:                    req.RouteToApp.PublicAddr,
 		appURI:                           req.RouteToApp.URI,
 		appTargetPort:                    int(req.RouteToApp.TargetPort),
+		webSessionID:                     webSessionID,
 		appClusterName:                   req.RouteToApp.ClusterName,
 		awsRoleARN:                       req.RouteToApp.AWSRoleARN,
 		azureIdentity:                    req.RouteToApp.AzureIdentity,
@@ -3896,6 +3928,8 @@ func (a *ServerWithRoles) generateUserCerts(ctx context.Context, req proto.UserC
 		certReq.usage = []string{teleport.UsageAppsOnly}
 	case proto.UserCertsRequest_Kubernetes:
 		certReq.usage = []string{teleport.UsageKubeOnly}
+	case proto.UserCertsRequest_AccessGraphAPI:
+		certReq.usage = []string{teleport.UsageAccessGraphAPIOnly}
 	case proto.UserCertsRequest_SSH:
 		// SSH certs are ssh-only by definition, certReq.usage only applies to
 		// TLS certs.
@@ -6870,10 +6904,8 @@ func (a *ServerWithRoles) GetKubernetesClusters(ctx context.Context) (result []t
 			},
 		),
 	)
-
 	if err != nil {
 		return nil, trace.Wrap(err)
-
 	}
 
 	return out, nil

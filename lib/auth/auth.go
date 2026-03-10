@@ -2748,6 +2748,12 @@ type certRequest struct {
 	azureIdentity string
 	// gcpServiceAccount is the GCP service account to generate certificate for.
 	gcpServiceAccount string
+	// webSessionID is the session ID of the web session.
+	// When the certificate is generated for access graph usage, we store the
+	// web session ID in the cert request to be able to link the certificate to
+	// a valid web session so that we can properly report access graph usage
+	// and reuse the same handlers.
+	webSessionID string
 	// dbService identifies the name of the database service requests will
 	// be routed to.
 	dbService string
@@ -3972,6 +3978,7 @@ func generateCert(ctx context.Context, a *Server, req certRequest, caType types.
 		Traits:            req.traits,
 		KubernetesGroups:  kubeGroups,
 		KubernetesUsers:   kubeUsers,
+		WebSessionID:      req.webSessionID,
 		RouteToApp: tlsca.RouteToApp{
 			SessionID:                       req.appSessionID,
 			URI:                             req.appURI,
