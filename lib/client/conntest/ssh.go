@@ -193,8 +193,8 @@ func (s *SSHConnectionTester) TestConnection(ctx context.Context, req TestConnec
 	clientConf.NonInteractive = true
 	clientConf.SSHProxyAddr = s.sshProxyAddr
 	clientConf.Stderr = processStderr
-	clientConf.Stdin = &bytes.Buffer{}
-	clientConf.Stdout = &bytes.Buffer{}
+	clientConf.Stdin = new(bytes.Buffer)
+	clientConf.Stdout = new(bytes.Buffer)
 	clientConf.TLS = clientConfTLS
 	clientConf.TLSRoutingEnabled = s.cfg.TLSRoutingEnabled
 	clientConf.Username = currentUser.GetName()

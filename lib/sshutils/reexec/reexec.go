@@ -26,9 +26,6 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// TODO(Joerger): Isolate reexec logic scattered throughout lib/srv to this package,
-// with additional packages for each of the reexec types (sftp, exec, networking, etc).
-
 // ReadChildError reads the child process's stderr pipe and returns it as a string.
 // If the stderr pipe is empty, an empty string and nil error is returned.
 func ReadChildError(stderr io.Reader) (string, error) {
@@ -36,10 +33,6 @@ func ReadChildError(stderr io.Reader) (string, error) {
 	errMsg := new(strings.Builder)
 	if _, err := io.Copy(errMsg, io.LimitReader(stderr, 4096)); err != nil {
 		return "", trace.Wrap(err, "Failed to read error message from child process")
-	}
-
-	if errMsg.Len() == 0 {
-		return "", nil
 	}
 
 	// TODO(Joerger): Process the err msg from stderr to provide deeper insights into
