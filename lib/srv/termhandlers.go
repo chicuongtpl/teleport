@@ -52,7 +52,7 @@ func (t *TermHandlers) HandleExec(ctx context.Context, ch ssh.Channel, req *ssh.
 
 	// If a terminal was previously allocated for this command, run command in
 	// an interactive session. Otherwise run it in an exec session.
-	if scx.GetTerm() != nil {
+	if scx.termAllocated {
 		return t.SessionRegistry.OpenSession(ctx, ch, scx)
 	}
 	return t.SessionRegistry.OpenExecSession(ctx, ch, scx)
@@ -79,23 +79,17 @@ func (t *TermHandlers) HandlePTYReq(ctx context.Context, ch ssh.Channel, req *ss
 	}
 	scx.Logger.DebugContext(ctx, "Terminal has been requested", "terminal", ptyRequest.Env, "width", params.W, "height", params.H)
 
-	// get an existing terminal or create a new one
-	term := scx.GetTerm()
-	if term == nil {
-		// a regular or forwarding terminal will be allocated
-		term, err = NewTerminal(scx)
-		if err != nil {
-			return trace.Wrap(err)
+	if err := scx.AllocateTerm(ch); err != nil {
+		return trace.Wrap(err)
+	}
+
+	scx.UpdateTerm(func(t Terminal) {
+		if err := t.SetWinSize(ctx, *params); err != nil {
+			scx.Logger.ErrorContext(ctx, "Failed setting window size", "error", err)
 		}
-		scx.SetTerm(term)
-		scx.termAllocated = true
-		scx.ttyName = term.TTYName()
-	}
-	if err := term.SetWinSize(ctx, *params); err != nil {
-		scx.Logger.ErrorContext(ctx, "Failed setting window size", "error", err)
-	}
-	term.SetTermType(ptyRequest.Env)
-	term.SetTerminalModes(termModes)
+		t.SetTermType(ptyRequest.Env)
+		t.SetTerminalModes(termModes)
+	})
 
 	// update the session
 	if err := t.SessionRegistry.NotifyWinChange(ctx, *params, scx); err != nil {

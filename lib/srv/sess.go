@@ -823,45 +823,20 @@ func newSession(ctx context.Context, r *SessionRegistry, scx *ServerContext, ch 
 
 	serverSessions.Inc()
 	startTime := time.Now().UTC()
-	rsess := rsession.Session{
-		Kind: types.SSHSessionKind,
-		ID:   scx.GetNewSessionID(),
-		TerminalParams: rsession.TerminalParams{
-			W: teleport.DefaultTerminalWidth,
-			H: teleport.DefaultTerminalHeight,
-		},
-		Login:          scx.Identity.Login,
-		Created:        startTime,
-		LastActive:     startTime,
-		ServerID:       scx.srv.ID(),
-		Namespace:      r.Srv.GetNamespace(),
-		ServerHostname: scx.srv.GetInfo().GetHostname(),
-		ServerAddr:     scx.ServerConn.LocalAddr().String(),
-		ClusterName:    scx.ClusterName,
-	}
-
-	term := scx.GetTerm()
-	if term != nil {
-		winsize, err := term.GetWinSize()
-		if err != nil {
-			return nil, nil, trace.Wrap(err)
-		}
-		rsess.TerminalParams.W = int(winsize.Width)
-		rsess.TerminalParams.H = int(winsize.Height)
-	}
 
 	var policySets []*types.SessionTrackerPolicySet
 	if scx.Identity.UnstableSessionJoiningAccessChecker != nil {
 		policySets = scx.Identity.UnstableSessionJoiningAccessChecker.SessionPolicySets()
 	}
 
+	sid := scx.GetNewSessionID()
 	access := moderation.NewSessionAccessEvaluator(policySets, types.SSHSessionKind, scx.Identity.TeleportUser)
 	sess := &session{
 		logger: slog.With(
 			teleport.ComponentKey, teleport.Component(teleport.ComponentSession, r.Srv.Component()),
-			"session_id", rsess.ID,
+			"session_id", sid,
 		),
-		id:              rsess.ID,
+		id:              sid,
 		registry:        r,
 		parties:         make(map[rsession.ID]*party),
 		participants:    make(map[rsession.ID]*party),
@@ -1413,7 +1388,7 @@ func (s *session) startInteractive(ctx context.Context, scx *ServerContext, p *p
 	s.io.AddWriter(sessionRecorderID, utils.WriteCloserWithContext(scx.srv.Context(), s.Recorder()))
 	s.BroadcastMessage("Creating session with ID: %v", s.id)
 
-	if err := s.startTerminal(ctx, scx); err != nil {
+	if err := s.startTerminal(ctx, scx, p.ch); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -1520,21 +1495,13 @@ func (s *session) startInteractive(ctx context.Context, scx *ServerContext, p *p
 	return nil
 }
 
-func (s *session) startTerminal(ctx context.Context, scx *ServerContext) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// allocate a terminal or take the one previously allocated via a
-	// separate "allocate TTY" SSH request
-	if s.term = scx.GetTerm(); s.term != nil {
-		scx.SetTerm(nil)
-	} else if term, err := NewTerminal(scx); err != nil {
-		s.logger.InfoContext(ctx, "Unable to allocate new terminal.", "error", err)
+func (s *session) startTerminal(ctx context.Context, scx *ServerContext, ch ssh.Channel) error {
+	term, err := scx.TakeTerm(ch)
+	if err != nil {
 		return trace.Wrap(err)
-	} else {
-		s.term = term
 	}
 
+	s.term = term
 	if err := s.term.Run(ctx); err != nil {
 		s.logger.ErrorContext(ctx, "Unable to run shell command.", "error", err)
 		return trace.ConvertSystemError(err)
@@ -2214,31 +2181,6 @@ func (s *session) getParties() (parties []*party) {
 		parties = append(parties, p)
 	}
 	return parties
-}
-
-// Stderr returns an io.Writer that writes to each party's SSH stderr channel.
-func (s *session) Stderr() io.Writer {
-	return &sessionStderrWriter{session: s}
-}
-
-type sessionStderrWriter struct {
-	session *session
-}
-
-func (w *sessionStderrWriter) Write(p []byte) (n int, err error) {
-	var wg sync.WaitGroup
-	// Stderr is low-volume and failure path oriented, so this uses simple,
-	// best-effort fanout instead of TermManager style buffering/failover.
-	for _, party := range w.session.getParties() {
-		// Write to parties in goroutines to ensure we don't favor the first (potentially slow) parties.
-		wg.Go(func() {
-			if _, writeErr := party.ch.Stderr().Write(p); writeErr != nil {
-				w.session.logger.WarnContext(w.session.serverCtx, "Failed writing to stderr of SSH channel", "error", writeErr)
-			}
-		})
-	}
-	wg.Wait()
-	return len(p), nil
 }
 
 type party struct {

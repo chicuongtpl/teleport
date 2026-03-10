@@ -206,10 +206,12 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 		childErr, err := reexec.ReadChildError(stderrR)
 		if err != nil {
 			logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
-		} else if childErr != "" {
-			if _, err := io.WriteString(channel.Stderr(), childErr); err != nil {
-				logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
-			}
+		} else if childErr == "" {
+			return
+		}
+
+		if _, err := io.WriteString(channel.Stderr(), childErr); err != nil {
+			logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
 		}
 	}()
 

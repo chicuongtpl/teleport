@@ -111,23 +111,6 @@ type Terminal interface {
 	SetTermType(string)
 }
 
-// NewTerminal returns a new terminal. Terminal can be local or remote
-// depending on cluster configuration.
-func NewTerminal(ctx *ServerContext) (Terminal, error) {
-	// It doesn't matter what mode the cluster is in, if this is a Teleport node
-	// return a local terminal.
-	if ctx.srv.Component() == teleport.ComponentNode {
-		return newLocalTerminal(ctx)
-	}
-
-	// If this is not a Teleport node, find out what mode the cluster is in and
-	// return the correct terminal.
-	if ctx.srv.Component() == teleport.ComponentForwardingNode {
-		return newRemoteTerminal(ctx)
-	}
-	return newLocalTerminal(ctx)
-}
-
 // terminal is a local PTY created by Teleport nodes.
 type terminal struct {
 	wg sync.WaitGroup
@@ -234,11 +217,22 @@ func (t *terminal) Run(ctx context.Context) error {
 		childErr, err := reexec.ReadChildError(stderrR)
 		if err != nil {
 			t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
-		} else if childErr != "" {
-			if _, err := io.WriteString(sess.Stderr(), childErr); err != nil {
-				t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
-			}
+		} else if childErr == "" {
+			return
 		}
+
+		// fan-out stderr for all parties. The reexec process stderr is low-volume and failure path oriented,
+		// so this uses simple, best-effort fanout instead of TermManager style buffering/failover.
+		var wg sync.WaitGroup
+		for _, party := range sess.getParties() {
+			// Write to parties in goroutines to ensure we don't favor the first (potentially slow) parties.
+			wg.Go(func() {
+				if _, writeErr := io.WriteString(party.ch.Stderr(), childErr); writeErr != nil {
+					t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
+				}
+			})
+		}
+		wg.Wait()
 	}()
 
 	// Close the TTY before returning to ensure that our half of the pipe is
@@ -548,6 +542,7 @@ type remoteTerminal struct {
 
 	ctx *ServerContext
 
+	ch        ssh.Channel
 	session   *tracessh.Session
 	params    rsession.TerminalParams
 	termModes ssh.TerminalModes
@@ -555,7 +550,7 @@ type remoteTerminal struct {
 	termType  string
 }
 
-func newRemoteTerminal(ctx *ServerContext) (*remoteTerminal, error) {
+func newRemoteTerminal(ctx *ServerContext, ch ssh.Channel) (*remoteTerminal, error) {
 	if ctx.RemoteSession == nil {
 		return nil, trace.BadParameter("remote session required")
 	}
@@ -563,6 +558,7 @@ func newRemoteTerminal(ctx *ServerContext) (*remoteTerminal, error) {
 	t := &remoteTerminal{
 		log:       ctx.Logger.With(teleport.ComponentKey, teleport.ComponentRemoteTerm),
 		ctx:       ctx,
+		ch:        ch,
 		session:   ctx.RemoteSession,
 		ptyBuffer: &ptyBuffer{},
 	}
@@ -611,8 +607,9 @@ func (t *remoteTerminal) Run(ctx context.Context) error {
 		w: stdin,
 	}
 
-	// Propagate stderr to the session parties.
-	t.session.Stderr = sess.Stderr()
+	// Propagate stderr to the client channel. Since remoteTerminals don't support session joining,
+	// stderr does not need to be fanned out to other session parties.
+	t.session.Stderr = t.ch.Stderr()
 
 	// if a specific term type was not requested, then pick the default one and request a pty
 	if t.termType == "" {

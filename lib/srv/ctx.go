@@ -681,20 +681,73 @@ func (c *ServerContext) AddCloser(closer io.Closer) {
 	c.closers = append(c.closers, closer)
 }
 
-// GetTerm returns a Terminal.
-func (c *ServerContext) GetTerm() Terminal {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.term
+// AllocateTerm allocates a Terminal if one is not already allocated. The provided ssh channel is only
+// used to allocate remote terminals, which do not support joining and thus don't need party fan-out.
+func (c *ServerContext) AllocateTerm(ch ssh.Channel) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.allocateTerminalUnderLock(ch)
 }
 
-// SetTerm set a Terminal.
-func (c *ServerContext) SetTerm(t Terminal) {
+// TakeTerm takes a newly or previously allocated Terminal.
+func (c *ServerContext) TakeTerm(ch ssh.Channel) (Terminal, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.term = t
+	// If the terminal is already allocated and has not been taken, this is a noop.
+	if err := c.allocateTerminalUnderLock(ch); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	term := c.term
+	c.term = nil
+	return term, nil
+}
+
+// newTerminal returns a new terminal. Terminal can be local or remote
+// depending on cluster configuration.
+func (c *ServerContext) allocateTerminalUnderLock(ch ssh.Channel) error {
+	if c.termAllocated {
+		if c.term == nil {
+			return trace.BadParameter("cannot allocate a terminal if the terminal has already been claimed.")
+		}
+		return nil
+	}
+
+	var err error
+	switch c.srv.Component() {
+	case teleport.ComponentNode:
+		// It doesn't matter what mode the cluster is in, if this is a Teleport node
+		// return a local terminal.
+		c.term, err = newLocalTerminal(c)
+	case teleport.ComponentForwardingNode:
+		// If this is not a Teleport node, find out what mode the cluster is in and
+		// return the correct terminal.
+		c.term, err = newRemoteTerminal(c, ch)
+	default:
+		c.term, err = newLocalTerminal(c)
+	}
+
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	c.termAllocated = true
+	c.ttyName = c.term.TTYName()
+	return nil
+}
+
+// UpdateTerm updates a pre-allocated terminal with a custom callback. If the terminal is not yet
+// allocated, or has already been taken by the consumer, does nothing.
+func (c *ServerContext) UpdateTerm(fn func(Terminal)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.term == nil {
+		return
+	}
+
+	fn(c.term)
 }
 
 // VisitEnv grants visitor-style access to env variables.
@@ -1162,7 +1215,7 @@ func (c *ServerContext) ExecCommand() (*ExecCommand, error) {
 		Username:              c.Identity.TeleportUser,
 		Login:                 c.Identity.Login,
 		Roles:                 mappedRoles,
-		Terminal:              c.termAllocated || command == "",
+		Terminal:              c.termAllocated,
 		TerminalName:          c.ttyName,
 		ClientAddress:         c.ServerConn.RemoteAddr().String(),
 		RequestType:           requestType,
