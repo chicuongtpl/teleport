@@ -183,6 +183,7 @@ func (s *SSHConnectionTester) TestConnection(ctx context.Context, req TestConnec
 	}
 
 	processStderr := new(bytes.Buffer)
+	processStdout := new(bytes.Buffer)
 
 	clientConf := &client.Config{}
 	clientConf.AddKeysToAgent = client.AddKeysToAgentNo
@@ -194,7 +195,7 @@ func (s *SSHConnectionTester) TestConnection(ctx context.Context, req TestConnec
 	clientConf.SSHProxyAddr = s.sshProxyAddr
 	clientConf.Stderr = processStderr
 	clientConf.Stdin = new(bytes.Buffer)
-	clientConf.Stdout = new(bytes.Buffer)
+	clientConf.Stdout = processStdout
 	clientConf.TLS = clientConfTLS
 	clientConf.TLSRoutingEnabled = s.cfg.TLSRoutingEnabled
 	clientConf.Username = currentUser.GetName()
@@ -210,7 +211,14 @@ func (s *SSHConnectionTester) TestConnection(ctx context.Context, req TestConnec
 	defer cancelFunc()
 
 	if err := tc.SSH(ctxWithTimeout, []string{"whoami"}); err != nil {
-		return s.handleErrFromSSH(ctx, connectionDiagnosticID, req.SSHPrincipal, err, processStderr, currentUser, req)
+		stderrMsg := processStderr.String()
+		if stderrMsg == "" {
+			// If stderr is empty, fallback to stdout. Old nodes send reexec process stderr over stdout.
+			// TODO(Joerger): DELETE IN v20.0.0
+			stderrMsg = processStdout.String()
+		}
+
+		return s.handleErrFromSSH(ctx, connectionDiagnosticID, req.SSHPrincipal, err, stderrMsg, currentUser, req)
 	}
 
 	connDiag, err := s.cfg.UserClient.AppendDiagnosticTrace(ctx, connectionDiagnosticID, types.NewTraceDiagnosticConnection(
@@ -233,7 +241,7 @@ func (s *SSHConnectionTester) TestConnection(ctx context.Context, req TestConnec
 }
 
 func (s SSHConnectionTester) handleErrFromSSH(ctx context.Context, connectionDiagnosticID string,
-	sshPrincipal string, sshError error, processStderr *bytes.Buffer, currentUser types.User, req TestConnectionRequest) (types.ConnectionDiagnostic, error) {
+	sshPrincipal string, sshError error, stderrMsg string, currentUser types.User, req TestConnectionRequest) (types.ConnectionDiagnostic, error) {
 	isConnectMyComputerNode := req.SSHNodeSetupMethod == SSHNodeSetupMethodConnectMyComputer
 
 	if trace.IsConnectionProblem(sshError) {
@@ -261,7 +269,7 @@ func (s SSHConnectionTester) handleErrFromSSH(ctx context.Context, connectionDia
 		return connDiag, nil
 	}
 
-	processStderrString := strings.TrimSpace(processStderr.String())
+	processStderrString := strings.TrimSpace(stderrMsg)
 	// If the selected principal does not exist on the node, attempting to connect emits:
 	// "Failed to launch: user: lookup username <principal>: no such file or directory."
 	isUsernameLookupFail := strings.HasPrefix(processStderrString, "Failed to launch: user:")
