@@ -750,6 +750,7 @@ func generateCertificate(authServer *auth.Server, identity TestIdentity) ([]byte
 			Generation:       id.Identity.Generation,
 			Renewable:        identity.Renewable,
 			Usage:            identity.AcceptedUsage,
+			Scope:            identity.Scope,
 		})
 		if err != nil {
 			return nil, nil, trace.Wrap(err)
@@ -1071,6 +1072,7 @@ type TestIdentity struct {
 	RouteToCluster string
 	Renewable      bool
 	Generation     uint64
+	Scope          string
 }
 
 // TestUser returns TestIdentity for local user. Note that this constructor only produces a
@@ -1090,6 +1092,20 @@ func TestUserWithRoles(username string, roles []string) TestIdentity {
 				Groups:   roles,
 			},
 		},
+	}
+}
+
+// TestScopedUser returns a TestIdentity for a local user with a scoped identity
+// pinned to the given scope.
+func TestScopedUser(username string, scope string) TestIdentity {
+	return TestIdentity{
+		I: authz.LocalUser{
+			Username: username,
+			Identity: tlsca.Identity{
+				Username: username,
+			},
+		},
+		Scope: scope,
 	}
 }
 
@@ -1300,7 +1316,7 @@ func (t *TLSServer) NewClientWithCert(clientCert tls.Certificate) (*authclient.C
 
 // NewClient returns new client to test server authenticated with identity
 func (t *TLSServer) NewClient(identity TestIdentity) (*authclient.Client, error) {
-	if localUser, ok := identity.I.(authz.LocalUser); ok && len(localUser.Identity.Groups) == 0 {
+	if localUser, ok := identity.I.(authz.LocalUser); ok && len(localUser.Identity.Groups) == 0 && identity.Scope == "" {
 		user, err := t.AuthServer.AuthServer.GetUser(context.TODO(), localUser.Username, false)
 		if err != nil {
 			return nil, trace.Wrap(err)
