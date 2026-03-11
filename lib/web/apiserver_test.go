@@ -10004,6 +10004,70 @@ func TestForwardingTraces(t *testing.T) {
 	}
 }
 
+func TestShouldForwardRequestToAppHandler(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		path           string
+		cookies        []http.Cookie
+		withClientCert bool
+		want           bool
+	}{
+		{
+			name: "fragment auth endpoint",
+			path: "/x-teleport-auth",
+			want: true,
+		},
+		{
+			name: "request with app session cookie",
+			path: "/",
+			cookies: []http.Cookie{{
+				Name:  app.CookieName,
+				Value: "session-id",
+			}},
+			want: true,
+		},
+		{
+			name:           "request with client cert",
+			path:           "/",
+			withClientCert: true,
+			want:           true,
+		},
+		{
+			name: "dbsc registration endpoint without app session cookie",
+			path: app.DBSCRegistrationPath,
+			want: true,
+		},
+		{
+			name: "dbsc refresh endpoint without app session cookie",
+			path: app.DBSCRefreshPath,
+			want: true,
+		},
+		{
+			name: "non app request without auth state",
+			path: "/webapi/sites",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodPost, "https://app.example.com"+tt.path, nil)
+			for _, cookie := range tt.cookies {
+				req.AddCookie(&cookie)
+			}
+			if tt.withClientCert {
+				req.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{{}}}
+			}
+
+			require.Equal(t, tt.want, shouldForwardRequestToAppHandler(req))
+		})
+	}
+}
+
 type mockPROXYSigner struct{}
 
 func (m *mockPROXYSigner) SignPROXYHeader(source, destination net.Addr) ([]byte, error) {

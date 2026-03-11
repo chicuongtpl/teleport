@@ -37,6 +37,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -243,6 +245,94 @@ func TestAuthPOST(t *testing.T) {
 			}
 		})
 	}
+}
+
+// dbscTestPack contains common test fixtures for DBSC tests.
+type dbscTestPack struct {
+	clock      clockwork.Clock
+	appSession types.WebSession
+	authClient *mockAuthClient
+	proxy      *testServer
+	client     *http.Client
+}
+
+func setupDBSCTest(t *testing.T) *dbscTestPack {
+	t.Helper()
+	fakeClock := clockwork.NewFakeClock()
+	clusterName := "test-cluster"
+	publicAddr := "app.example.com"
+	key, cert, err := tlsca.GenerateSelfSignedCA(
+		pkix.Name{CommonName: clusterName},
+		[]string{publicAddr, apiutils.EncodeClusterName(clusterName)},
+		defaults.CATTL,
+	)
+	require.NoError(t, err)
+
+	appSession := createAppSession(t, fakeClock, key, cert, clusterName, publicAddr)
+	authClient := &mockAuthClient{appSession: appSession}
+	p := setup(t, fakeClock, authClient, nil)
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+
+	return &dbscTestPack{
+		clock:      fakeClock,
+		appSession: appSession,
+		authClient: authClient,
+		proxy:      p,
+		client:     client,
+	}
+}
+
+func TestDBSCRegistration(t *testing.T) {
+	t.Parallel()
+	p := setupDBSCTest(t)
+
+	// Register and verify response format.
+	challenge, err := createDBSCChallenge(
+		p.clock.Now(), p.appSession.GetBearerToken(), p.appSession.GetName(),
+		dbscChallengeKindRegistration, DBSCChallengeDefaultTTL,
+	)
+	require.NoError(t, err)
+
+	audience := "https://" + p.proxy.serverURL.Host + DBSCRegistrationPath
+	proofJWT, _ := mustBuildDBSCRegistrationProof(t, challenge, audience)
+
+	req, err := http.NewRequest(http.MethodPost, "https://"+p.proxy.serverURL.Host+DBSCRegistrationPath, nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: p.appSession.GetName()})
+	req.AddCookie(&http.Cookie{Name: SubjectCookieName, Value: p.appSession.GetBearerToken()})
+	req.Header.Set(SecureSessionResponseHeaderName, proofJWT)
+
+	resp, err := p.client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Verify short-lived cookie is set.
+	setCookies := resp.Header.Values("Set-Cookie")
+	require.Len(t, setCookies, 1)
+	require.Contains(t, setCookies[0], "Max-Age=600")
+
+	// Verify response body.
+	var response dbscSessionInstructionResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.Equal(t, p.appSession.GetName(), response.SessionIdentifier)
+	require.Equal(t, DBSCRefreshPath, response.RefreshURL)
+}
+
+func TestDBSCRegistrationRejectsInvalidProof(t *testing.T) {
+	t.Parallel()
+	p := setupDBSCTest(t)
+
+	req, err := http.NewRequest(http.MethodPost, "https://"+p.proxy.serverURL.Host+DBSCRegistrationPath, nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: p.appSession.GetName()})
+	req.AddCookie(&http.Cookie{Name: SubjectCookieName, Value: p.appSession.GetBearerToken()})
+	req.Header.Set(SecureSessionResponseHeaderName, "invalid-jwt")
+
+	resp, err := p.client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
 func TestHasName(t *testing.T) {
@@ -505,14 +595,15 @@ func (p *testServer) makeRequest(t *testing.T, method, endpoint string, reqBody 
 
 type mockAuthClient struct {
 	authclient.ClientI
-	clusterName   string
-	appSession    types.WebSession
-	sessionError  error
-	appServers    []types.AppServer
-	caKey         []byte
-	caCert        []byte
-	emittedEvents []apievents.AuditEvent
-	mtx           sync.Mutex
+	clusterName             string
+	appSession              types.WebSession
+	sessionError            error
+	invalidateSessionDelete bool
+	appServers              []types.AppServer
+	caKey                   []byte
+	caCert                  []byte
+	emittedEvents           []apievents.AuditEvent
+	mtx                     sync.Mutex
 }
 
 type mockClusterName struct {
@@ -528,6 +619,12 @@ func (c *mockAuthClient) EmitAuditEvent(ctx context.Context, event apievents.Aud
 }
 
 func (c *mockAuthClient) DeleteAppSession(ctx context.Context, r types.DeleteAppSessionRequest) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	if c.invalidateSessionDelete && c.appSession != nil && c.appSession.GetName() == r.SessionID {
+		c.appSession = nil
+	}
 	return nil
 }
 
@@ -543,8 +640,25 @@ func (n mockClusterName) GetClusterName() string {
 	return "local-cluster"
 }
 
-func (c *mockAuthClient) GetAppSession(context.Context, types.GetAppSessionRequest) (types.WebSession, error) {
-	return c.appSession, c.sessionError
+func (c *mockAuthClient) GetAppSession(_ context.Context, _ types.GetAppSessionRequest) (types.WebSession, error) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	if c.sessionError != nil {
+		return nil, c.sessionError
+	}
+	if c.appSession == nil {
+		return nil, trace.NotFound("app session not found")
+	}
+	return c.appSession, nil
+}
+
+func (c *mockAuthClient) UpsertAppSession(_ context.Context, session types.WebSession) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	c.appSession = session
+	return nil
 }
 
 func (c *mockAuthClient) GetApplicationServers(_ context.Context, _ string) ([]types.AppServer, error) {
@@ -619,6 +733,44 @@ func createAppSession(t *testing.T, clock *clockwork.FakeClock, caKey, caCert []
 	require.NoError(t, err)
 
 	return appSession
+}
+
+func mustGenerateDBSCKeyPair(t *testing.T) (crypto.Signer, jose.JSONWebKey) {
+	t.Helper()
+
+	privateKey, err := cryptosuites.GenerateKeyWithAlgorithm(cryptosuites.ECDSAP256)
+	require.NoError(t, err)
+
+	publicJWK := jose.JSONWebKey{
+		Algorithm: string(jose.ES256),
+		Key:       privateKey.Public(),
+		Use:       "sig",
+	}
+	return privateKey, publicJWK
+}
+
+func mustBuildDBSCRegistrationProof(t *testing.T, challenge, audience string) (string, jose.JSONWebKey) {
+	privateKey, publicJWK := mustGenerateDBSCKeyPair(t)
+	return mustBuildDBSCRegistrationProofWithKey(t, challenge, audience, privateKey, publicJWK), publicJWK
+}
+
+func mustBuildDBSCRegistrationProofWithKey(t *testing.T, challenge, audience string, privateKey crypto.Signer, publicJWK jose.JSONWebKey) string {
+	t.Helper()
+
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.ES256, Key: privateKey},
+		(&jose.SignerOptions{}).WithType(dbscProofJWTType),
+	)
+	require.NoError(t, err)
+
+	token, err := jwt.Signed(signer).Claims(dbscRegistrationProofClaims{
+		JTI: challenge,
+		JWK: &publicJWK,
+		Aud: []string{audience},
+	}).Serialize()
+	require.NoError(t, err)
+
+	return token
 }
 
 // createAppKeyCertPair creates and a client key and signed app cert for the client key

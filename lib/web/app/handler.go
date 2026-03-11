@@ -33,6 +33,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
+	"github.com/gravitational/roundtrip"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/julienschmidt/httprouter"
@@ -144,6 +146,7 @@ func NewHandler(ctx context.Context, c *HandlerConfig) (*Handler, error) {
 	h.router.UseRawPath = true
 	h.router.GET("/x-teleport-auth", makeRouterHandler(h.startAppAuthExchange))
 	h.router.POST("/x-teleport-auth", makeRouterHandler(h.completeAppAuthExchange))
+	h.router.POST(DBSCRegistrationPath, makeRouterHandler(h.handleDBSCRegistration))
 	h.router.GET("/teleport-logout", h.withRouterAuth(h.handleLogout))
 	h.router.NotFound = h.withAuth(h.handleHttp)
 
@@ -153,6 +156,52 @@ func NewHandler(ctx context.Context, c *HandlerConfig) (*Handler, error) {
 // ServeHTTP hands the request to the request router.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.router.ServeHTTP(w, r)
+}
+
+func (h *Handler) handleDBSCRegistration(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
+	appSessionID, err := extractCookie(r, CookieName)
+	if err != nil {
+		return trace.AccessDenied("invalid session")
+	}
+
+	ws, err := h.getAppSessionFromCookie(r)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "Failed to fetch app session for DBSC registration", "error", err)
+		return trace.AccessDenied("invalid session")
+	}
+
+	rawProof, err := parseSecureSessionResponseHeader(r.Header.Get(SecureSessionResponseHeaderName))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	registrationAudience := "https://" + r.Host + DBSCRegistrationPath
+	proofResult, err := validateDBSCRegistrationProof(rawProof, h.c.Clock.Now(), registrationAudience, ws.GetBearerToken(), appSessionID)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if err := h.persistDBSCRegistrationJWK(r.Context(), ws, proofResult.PublicKey); err != nil {
+		h.logger.WarnContext(r.Context(), "Failed to persist DBSC registration key", "error", err)
+		return trace.AccessDenied("invalid session")
+	}
+
+	reissueDBSCBoundAppSessionCookie(w, appSessionID)
+	roundtrip.ReplyJSON(w, http.StatusOK, buildDBSCRegistrationResponse(r, appSessionID))
+	return nil
+}
+
+func (h *Handler) persistDBSCRegistrationJWK(ctx context.Context, ws types.WebSession, publicJWK jose.JSONWebKey) error {
+	wsCopy := ws.Copy()
+	webSession, ok := wsCopy.(*types.WebSessionV2)
+	if !ok {
+		return trace.BadParameter("unsupported web session type %T", ws)
+	}
+
+	rawJWK, err := marshalDBSCRegistrationJWK(publicJWK)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	webSession.Spec.DBSCRegistrationJWK = rawJWK
+	return trace.Wrap(h.c.AuthClient.UpsertAppSession(ctx, webSession))
 }
 
 // HandleConnection handles connections from plain TCP applications.
@@ -525,6 +574,11 @@ func HasFragment(r *http.Request) bool {
 	return r.URL.Path == "/x-teleport-auth"
 }
 
+// HasDBSCPath checks if the request is coming to a DBSC endpoint.
+func HasDBSCPath(r *http.Request) bool {
+	return r.URL.Path == DBSCRegistrationPath
+}
+
 // HasSessionCookie checks if an application specific cookie exists.
 func HasSessionCookie(r *http.Request) bool {
 	_, err := r.Cookie(CookieName)
@@ -571,6 +625,12 @@ func HasName(r *http.Request, proxyPublicAddrs []utils.NetAddr) (string, bool) {
 }
 
 const (
+	// DBSCRegistrationPath is the DBSC registration endpoint path.
+	DBSCRegistrationPath = "/x-teleport-dbsc"
+
+	// DBSCRefreshPath is the DBSC refresh endpoint path.
+	DBSCRefreshPath = "/x-teleport-dbsc-refresh"
+
 	// CookieName is the name of the application session cookie.
 	CookieName = "__Host-grv_app_session"
 

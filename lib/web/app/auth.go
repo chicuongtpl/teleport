@@ -201,28 +201,27 @@ func (h *Handler) completeAppAuthExchange(w http.ResponseWriter, r *http.Request
 		return trace.AccessDenied("access denied")
 	}
 
-	// Set the "Set-Cookie" header on the response.
+	// Set the "Set-Cookie" headers on the response.
 	// Set Same-Site policy for the session cookies to None in order to
 	// support redirects that identity providers do during SSO auth.
 	// Otherwise the session cookie won't be sent and the user will
 	// get redirected to the application launcher.
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
-	http.SetCookie(w, &http.Cookie{
-		Name:     CookieName,
-		Value:    req.CookieValue,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteNoneMode,
-	})
-	http.SetCookie(w, &http.Cookie{
-		Name:     SubjectCookieName,
-		Value:    ws.GetBearerToken(),
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteNoneMode,
-	})
+	http.SetCookie(w, newAppSessionCookie(req.CookieValue, false /* dbscBound */))
+	http.SetCookie(w, newSubjectSessionCookie(ws.GetBearerToken()))
+
+	challenge, err := createDBSCChallenge(
+		h.c.Clock.Now(),
+		ws.GetBearerToken(),
+		req.CookieValue,
+		dbscChallengeKindRegistration,
+		DBSCChallengeDefaultTTL,
+	)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "Failed to create DBSC challenge", "error", err)
+		return trace.AccessDenied("access denied")
+	}
+	w.Header().Set(SecureSessionRegistrationHeaderName, buildSecureSessionRegistrationHeader(challenge))
 
 	requiredApps := strings.Split(req.RequiredApps, ",")
 	if len(requiredApps) <= 1 {

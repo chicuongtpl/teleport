@@ -445,11 +445,11 @@ func (h *APIHandler) handlePreflight(w http.ResponseWriter, r *http.Request) {
 // Check if this request should be forwarded to an application handler to
 // be handled by the UI and handle the request appropriately.
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// If the request is either to the fragment authentication endpoint or if the
-	// request has a session cookie or a client cert, forward to
-	// application handlers. If the request is requesting a
+	// If the request is either to the fragment authentication endpoint, a DBSC
+	// endpoint, or has a session cookie/client cert, forward to application
+	// handlers. If the request is requesting a
 	// FQDN that is not of the proxy, redirect to application launcher.
-	if h.appHandler != nil && (app.HasFragment(r) || app.HasSessionCookie(r) || app.HasClientCert(r)) {
+	if h.appHandler != nil && shouldForwardRequestToAppHandler(r) {
 		h.appHandler.ServeHTTP(w, r)
 		return
 	}
@@ -484,6 +484,10 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Serve the Web UI.
 	h.handler.ServeHTTP(w, r)
+}
+
+func shouldForwardRequestToAppHandler(r *http.Request) bool {
+	return app.HasFragment(r) || app.HasSessionCookie(r) || app.HasClientCert(r) || app.HasDBSCPath(r)
 }
 
 // HandleConnection handles connections from plain TCP applications.
