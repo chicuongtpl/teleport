@@ -100,7 +100,7 @@ func (a *Server) VerifySSOMFASession(ctx context.Context, username, sessionID, t
 	}
 
 	const notFoundErrMsg = "mfa sso session data not found"
-	mfaSess, err := a.GetSSOMFASessionData(ctx, sessionID)
+	mfaSess, err := a.GetMFASessionData(ctx, sessionID)
 	if trace.IsNotFound(err) {
 		return nil, trace.AccessDenied("%s", notFoundErrMsg)
 	} else if err != nil {
@@ -141,7 +141,7 @@ func (a *Server) VerifySSOMFASession(ctx context.Context, username, sessionID, t
 	}
 
 	if mfaSess.ChallengeExtensions.AllowReuse != mfav1.ChallengeAllowReuse_CHALLENGE_ALLOW_REUSE_YES {
-		if err := a.DeleteSSOMFASessionData(ctx, sessionID); err != nil {
+		if err := a.DeleteMFASessionData(ctx, sessionID); err != nil {
 			return nil, trace.Wrap(err)
 		}
 	}
@@ -193,7 +193,7 @@ func (a *Server) upsertMFASession(ctx context.Context, params upsertMFASessionPa
 		}
 	}
 
-	return trace.Wrap(a.UpsertSSOMFASessionData(ctx, data))
+	return trace.Wrap(a.UpsertMFASessionData(ctx, data))
 }
 
 // UpsertSSOMFASessionWithToken upserts the given SSO MFA session with a random mfa token.
@@ -203,7 +203,7 @@ func (a *Server) UpsertSSOMFASessionWithToken(ctx context.Context, sd *services.
 		return "", trace.Wrap(err)
 	}
 
-	if err := a.UpsertSSOMFASessionData(ctx, sd); err != nil {
+	if err := a.UpsertMFASessionData(ctx, sd); err != nil {
 		return "", trace.Wrap(err)
 	}
 
@@ -212,7 +212,7 @@ func (a *Server) UpsertSSOMFASessionWithToken(ctx context.Context, sd *services.
 
 // GetSSOMFASession returns the SSO MFA session for the given username and sessionID.
 func (a *Server) GetSSOMFASession(ctx context.Context, sessionID string) (*services.MFASessionData, error) {
-	sd, err := a.GetSSOMFASessionData(ctx, sessionID)
+	sd, err := a.GetMFASessionData(ctx, sessionID)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
