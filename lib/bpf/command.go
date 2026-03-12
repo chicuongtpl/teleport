@@ -47,15 +47,15 @@ type exec struct {
 	// session
 	objs commandObjects
 
-	eventBuf *ringbuf.Reader
-	lost     *ebpf.Map
-	toClose  []io.Closer
-
-	closed bool
-	mtx    sync.Mutex
-
 	bpfEvents   chan []byte
 	lostCounter *Counter
+	toClose     []io.Closer
+
+	closed   bool
+	flushBuf func() error
+
+	mtx sync.Mutex
+	wg  sync.WaitGroup
 }
 
 // startExec will load, start, and pull events off the ring buffer
@@ -107,17 +107,17 @@ func startExec(bufferSize int) (*exec, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	bpfEvents := make(chan []byte, bufferSize)
-	go sendEvents(bpfEvents, eventBuf)
-
-	return &exec{
+	e := &exec{
 		objs:        objs,
-		eventBuf:    eventBuf,
-		lost:        objs.LostCounter,
-		toClose:     toClose,
-		bpfEvents:   bpfEvents,
 		lostCounter: lostCtr,
-	}, nil
+		toClose:     toClose,
+		flushBuf:    eventBuf.Flush,
+	}
+
+	e.bpfEvents = make(chan []byte, bufferSize)
+	e.wg.Go(func() { sendEvents(e.bpfEvents, eventBuf) })
+
+	return e, nil
 }
 
 func (e *exec) startSession(auditSessionID uint32) error {
@@ -161,6 +161,13 @@ func (e *exec) close() {
 	}
 
 	e.closed = true
+
+	if err := e.flushBuf(); err != nil {
+		logger.WarnContext(context.Background(), "failed to flush command ring buffer", "error", err)
+	} else {
+		logger.DebugContext(context.Background(), "Flushed command ring buffer, waiting for pending events to be processed")
+		e.wg.Wait()
+	}
 
 	for _, link := range e.toClose {
 		if err := link.Close(); err != nil {
