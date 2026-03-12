@@ -2,15 +2,15 @@
 {{$appName := .Name -}}
 {{range .FlattenedCommands|SortCommandsByName -}}
 {{if not .Hidden -}}
+{{- $fullCommand := printf "%v %v" $appName .FullCommand -}}
+{{- $anyFlags := AnyVisibleFlags $fullCommand .Flags -}}
+{{- $flagTable := FlagsToRows $fullCommand (ReplaceFlagDefaults $fullCommand .Flags) | FormatThreeColMarkdownTable -}}
 ## {{$appName}} {{.FullCommand}}
 
 {{.Help|Wrap 0 }}
 Usage:
 
-```code
-$ {{$appName}} {{.FullCommand}}{{if AnyVisibleFlags (printf "%v %v" $appName .FullCommand) .Flags}} [<flags>]{{end}}{{range .Args}}{{if not .Hidden}} {{ .|FormatUsageArg}}{{end}}{{end}}
-```
-
+{{FormatUsageCodeFence $fullCommand $anyFlags .Args .Commands}}
 {{if AnyEnvVarsForCmd .Args .Flags -}}
 Environment variables:
 
@@ -20,12 +20,12 @@ Environment variables:
 
 {{end -}}
 
-{{ if AnyVisibleFlags (printf "%v %v" $appName .FullCommand) .Flags -}}
+{{ if $anyFlags -}}
 Flags:
 
 |Flag|Default|Description|
 |---|---|---|
-{{- FlagsToRows (printf "%v %v" $appName .FullCommand) (ReplaceFlagDefaults (printf "%v %v" $appName .FullCommand) .Flags)|FormatThreeColMarkdownTable }}
+{{- $flagTable}}
 
 {{end -}}
 {{ if .Args -}}
@@ -33,7 +33,7 @@ Arguments:
 
 |Argument|Default|Description|
 |---|---|---|
-{{- (ReplaceArgDefaults (printf "%v %v" $appName .FullCommand) .Args)|ArgsToRows|FormatThreeColMarkdownTable }}
+{{- (ReplaceArgDefaults $fullCommand .Args)|ArgsToRows|FormatThreeColMarkdownTable }}
 
 {{end -}}
 {{end -}}
@@ -41,10 +41,7 @@ Arguments:
 {{end -}}
 
 {{define "FormatUsage" -}}
-```code
-$ {{.Name}}{{if AnyVisibleFlags .Name .Flags}} [<flags>]{{end}}{{range .Args}}{{if not .Hidden}} {{ .|FormatUsageArg}}{{end}}{{end}}{{if .Commands}} <command> [<args> ...]{{end}}
-```
-
+{{FormatUsageCodeFence .Name (AnyVisibleFlags .Name .Flags) .Args .Commands}}
 {{end -}}
 ---
 title: {{.App.Name}} Reference
@@ -61,12 +58,14 @@ This guide provides a comprehensive list of commands, arguments, and flags for
 
 {{ .App.Help|Wrap 0 }}
 {{template "FormatUsage" .App -}}
-{{if AnyVisibleFlags .App.Name .Context.Flags -}}
+{{- $anyGlobalFlags := AnyVisibleFlags .App.Name .Context.Flags -}}
+{{- $globalFlagTable := FlagsToRows .App.Name (ReplaceFlagDefaults .App.Name .Context.Flags) | FormatThreeColMarkdownTable -}}
+{{if $anyGlobalFlags -}}
 Global flags:
 
 |Flag|Default|Description|
 |---|---|---|
-{{- FlagsToRows .App.Name (ReplaceFlagDefaults .App.Name .Context.Flags)|FormatThreeColMarkdownTable}}
+{{- $globalFlagTable}}
 
 {{end -}}
 {{if AnyEnvVarsForCmd .Context.Args .Context.Flags -}}

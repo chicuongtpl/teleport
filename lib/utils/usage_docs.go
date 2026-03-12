@@ -287,6 +287,34 @@ func formatUsageArg(arg *kingpin.ArgModel) string {
 	return ret
 }
 
+// formatUsageCodeFence returns a complete usage code fence, e.g.:
+//
+//	```code
+//	$ tsh ssh [<flags>] [<host>]
+//	```
+//
+// anyFlags controls whether "[<flags>]" is included; hidden args are omitted.
+// A non-empty cmds appends " <command> [<args> ...]" for top-level app usage.
+func formatUsageCodeFence(cmdName string, anyFlags bool, args []*kingpin.ArgModel, cmds []*kingpin.CmdModel) string {
+	var b strings.Builder
+	b.WriteString("```code\n$ ")
+	b.WriteString(cmdName)
+	if anyFlags {
+		b.WriteString(" [<flags>]")
+	}
+	for _, arg := range args {
+		if !arg.Hidden {
+			b.WriteString(" ")
+			b.WriteString(formatUsageArg(arg))
+		}
+	}
+	if len(cmds) > 0 {
+		b.WriteString(" <command> [<args> ...]")
+	}
+	b.WriteString("\n```\n")
+	return b.String()
+}
+
 // formatHelp prints help text to include in a Markdown table cell. It escapes
 // curly, angle, and square braces to avoid breaking the MDX parser, and it
 // escapes pipes to avoid breaking the cell.
@@ -360,6 +388,7 @@ func updateAppUsageTemplate(r io.Reader, config generatorConfig, app *kingpin.Ap
 		"FlagsToRows":                 flagsToRows,
 		"FormatThreeColMarkdownTable": formatThreeColMarkdownTable,
 		"FormatUsageArg":              formatUsageArg,
+		"FormatUsageCodeFence":        formatUsageCodeFence,
 		"ReplaceFlagDefaults":         replaceFlagDefaults,
 		"ReplaceArgDefaults":          replaceArgDefaults,
 		"SortCommandsByName":          sortCommandsByName,
