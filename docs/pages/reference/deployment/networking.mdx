@@ -272,29 +272,27 @@ have set up your Teleport cluster network incorrectly.
 
 ### Connection reset by peer
 
-If you see the message, `Connection reset by peer`, it often means that your
-Teleport instance is attempting to connect to an upstream host that either:
-- has no process listening on the required port
-- exited the process that was listening on the required port
+If you see the message, `connection reset by peer`, it means that the component
+of your Teleport cluster that has emitted the log (e.g., a Teleport Agent)
+received a TCP packet with a control bit set to RST (reset). A TCP server sends
+an RST packet if it receives a packet that is unexpected given its connection
+state, e.g., if the other side unexpectedly exits mid-connection.
 
-You can rule out the latter scenario by checking whether the upstream process
-was running at the time of the error message. If the upstream server is running
-as expected, you can:
+There is a variety of reasons why an upstream server may reset the connection,
+and they may or may not have to do with the components of a Teleport cluster.
+For example, a `tsh` client can emit a `connection reset by peer` message if it
+is behind the Teleport Proxy Service, which closes a connection if it receives
+traffic from an outdated `tsh` client. It could also be that a Teleport Agent
+proxying a connection exited without closing the connection. A device like a
+firewall or load balancer may also be to blame.
 
-1. Check the configuration of the Teleport process reporting the error. Make
-   sure the port it targets matches the one with an associated listener.
-2. Make sure no components of your network are blocking traffic from your
-   Teleport process. 
+To investigate:
 
-   For example, you can use tooling built into your cloud provider, such as the
-   AWS [Reachability
-   Analyzer](https://docs.aws.amazon.com/vpc/latest/reachability/what-is-reachability-analyzer.html)
-   , to make sure your Teleport process can dial the target server. There could
-   be a misconfigured security group or internet gateway.
-
-   If possible, you may want to open a shell into your Teleport process's host
-   and use tools like `nc` and `traceroute` to see if your Teleport process can
-   reach the upstream server.
+1. If the connection involves two Teleport components, make sure their versions
+   abide by the Teleport [version compatibility
+   guarantees](../../upgrading/overview.mdx).
+1. Examine the logs of the remote Teleport process and check whether the process
+   was healthy at the time you saw the error.
 
 ### First record does not look like a TLS handshake
 
@@ -339,8 +337,8 @@ use [TLS
 multiplexing](../../zero-trust-access/deploy-a-cluster/tls-routing.mdx), but you
 are running the Teleport Proxy Service behind a Layer 7 load balancer that only
 returns the load balancer's main certificate instead of allowing the Teleport
-internal certficate. Your infrastructure may be interfering with TLS connections
-by altering the certificate that your Teleport instance presents.
+internal certificate. Your infrastructure may be interfering with TLS
+connections by altering the certificate that your Teleport instance presents.
 
 Investigate whether the certificate your client receives is signed by, for
 example, a corporate TLS proxy, or has otherwise been transformed between the
