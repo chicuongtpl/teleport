@@ -340,6 +340,7 @@ type generatorConfig struct {
 	EnvVars              map[string]envVarDefault `yaml:"env_vars"`
 	FlagDefaultOverrides []flagDefaultOverride    `yaml:"flag_default_overrides"`
 	ArgDefaultOverrides  []argDefaultOverride     `yaml:"arg_default_overrides"`
+	HiddenFlagOverrides  []hiddenFlagOverride     `yaml:"hidden_flag_overrides"`
 }
 
 type flagDefaultOverride struct {
@@ -352,6 +353,11 @@ type argDefaultOverride struct {
 	FullCommand string `yaml:"full_command"`
 	Arg         string `yaml:"arg"`
 	Value       string `yaml:"value"`
+}
+
+type hiddenFlagOverride struct {
+	FullCommand string `yaml:"full_command"`
+	Flag        string `yaml:"arg"`
 }
 
 // loadConfig loads possible default environment variables defined in a YAML file
