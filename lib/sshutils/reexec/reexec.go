@@ -26,12 +26,14 @@ import (
 	"github.com/gravitational/trace"
 )
 
+const maxRead = 4096
+
 // ReadChildError reads the child process's stderr pipe and returns it as a string.
 // If the stderr pipe is empty, an empty string and nil error is returned.
 func ReadChildError(stderr io.Reader) (string, error) {
 	// Read the error msg from stderr.
 	errMsg := new(strings.Builder)
-	if _, err := io.Copy(errMsg, io.LimitReader(stderr, 4096)); err != nil {
+	if _, err := io.Copy(errMsg, io.LimitReader(stderr, maxRead)); err != nil {
 		return "", trace.Wrap(err, "Failed to read error message from child process")
 	}
 

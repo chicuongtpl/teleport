@@ -217,7 +217,9 @@ func (t *terminal) Run(ctx context.Context) error {
 		childErr, err := reexec.ReadChildError(stderrR)
 		if err != nil {
 			t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
-		} else if childErr == "" {
+			return
+		}
+		if childErr == "" {
 			return
 		}
 
@@ -227,7 +229,7 @@ func (t *terminal) Run(ctx context.Context) error {
 		for _, party := range sess.getParties() {
 			// Write to parties in goroutines to ensure we don't favor the first (potentially slow) parties.
 			wg.Go(func() {
-				if _, writeErr := io.WriteString(party.ch.Stderr(), childErr); writeErr != nil {
+				if _, err := io.WriteString(party.ch.Stderr(), childErr); err != nil {
 					t.serverContext.Logger.WarnContext(context.WithoutCancel(ctx), "Failed to propagate child process stderr to client", "error", err)
 				}
 			})

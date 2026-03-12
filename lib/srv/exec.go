@@ -134,7 +134,7 @@ type localExec struct {
 	// Ctx holds the *ServerContext.
 	Ctx *ServerContext
 
-	// waitForOutputStreams is closed when child reexec and shell process's have
+	// waitForOutputStreams is closed when child reexec and shell processes have
 	// their stderr/stdout fully consumed by io.Copy goroutines. This is necessary
 	// due to the use of custom pipes, which exec.Cmd does not wait for closure of
 	// in Wait().
@@ -207,7 +207,9 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 		childErr, err := reexec.ReadChildError(stderrR)
 		if err != nil {
 			logger.WarnContext(context.WithoutCancel(ctx), "Failed to read child process stderr", "error", err)
-		} else if childErr == "" {
+			return
+		}
+		if childErr == "" {
 			return
 		}
 
