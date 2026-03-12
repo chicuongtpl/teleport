@@ -5220,7 +5220,6 @@ func loadClientConfigFromCLIConf(cf *CLIConf, proxy string) (*client.Config, err
 	c.DisplayParticipantRequirements = cf.displayParticipantRequirements
 	c.SSHLogDir = cf.SSHLogDir
 	c.DisableSSHResumption = cf.DisableSSHResumption
-	c.MFAAdder = cf.mfaAdder
 
 	switch cf.Relay {
 	case "":

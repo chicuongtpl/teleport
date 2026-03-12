@@ -113,8 +113,12 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 	// If the user has no device registered, prompt them to register and then re-generate the challenge.
 	noRegisteredDevices := chal.WebauthnChallenge == nil && chal.SSOChallenge == nil && chal.TOTP == nil
 	if noRegisteredDevices && c.CreateRegisterChallenge != nil && c.AddMFADevice != nil {
-		if err := c.Register(ctx, RegisterDeviceConfig{}); err != nil {
+		added, err := c.Register(ctx, RegisterDeviceConfig{})
+		if err != nil {
 			return nil, trace.Wrap(err)
+		}
+		if !added {
+			return nil, &ErrNoMFADevices
 		}
 
 		chal, err = c.CreateAuthenticateChallenge(ctx, req)
@@ -133,49 +137,24 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 	return resp, trace.Wrap(err)
 }
 
-func (c *Ceremony) Register(ctx context.Context, config RegisterDeviceConfig) error {
+func (c *Ceremony) Register(ctx context.Context, config RegisterDeviceConfig) (bool, error) {
 	regPrompt := c.PromptConstructor()
 
-	// TODO: Roll AskRegister and Register together with c.CreateRegisterChallenge and c.Run passed as arguments.
 	var err error
-	config, err = regPrompt.AskRegister(ctx, config)
+	resp, callback, err := regPrompt.AskRegister(ctx, config)
 	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	// TODO: avoid recursive registration if no challenge available. Probably as a promptOpt?
-	mfaResp, err := c.Run(ctx, &proto.CreateAuthenticateChallengeRequest{
-		ChallengeExtensions: &mfav1.ChallengeExtensions{
-			Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_MANAGE_DEVICES,
-		},
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	regChal, err := c.CreateRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
-		// DeviceType:  config.ProtoType,
-		// DeviceUsage: config.ProtoUsage,
-		ExistingMFAResponse: mfaResp,
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	resp, callback, err := regPrompt.Register(ctx, regChal, config)
-	if err != nil {
-		return trace.Wrap(err)
+		return false, trace.Wrap(err)
 	}
 
 	if err = c.AddMFADevice(ctx, resp, config); err != nil {
 		callback.Rollback()
-		return trace.Wrap(err)
+		return false, trace.Wrap(err)
 	}
 	if err := callback.Confirm(); err != nil {
-		return trace.Wrap(err)
+		return false, trace.Wrap(err)
 	}
 
-	return nil
+	return true, nil
 }
 
 // CeremonyFn is a function that will carry out an MFA ceremony.

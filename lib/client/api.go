@@ -536,13 +536,6 @@ type Config struct {
 
 	// ProxyTemplates describe rules for parsing out proxy out of full hostnames.
 	ProxyTemplates ProxyTemplates
-
-	// Attempts to add an MFA device. If provided, this function will be called
-	// if MFA is required to connect to a node, but the user has no MFA devices
-	// configured. Returns true if the MFA device was successfully added, and
-	// false if there was no error, but the device was not added (for example,
-	// the user refused to register it).
-	MFAAdder MFAAdderFunc
 }
 
 // CachePolicy defines cache policy for local clients
@@ -2125,7 +2118,7 @@ func (tc *TeleportClient) ConnectToNode(ctx context.Context, clt *ClusterClient,
 	// Any direct connection errors other than access denied, which should be returned
 	// if MFA is required, take precedent over MFA errors due to users not having any
 	// enrolled devices.
-	case !trace.IsAccessDenied(directErr) && errors.Is(mfaErr, authclient.ErrNoMFADevices):
+	case !trace.IsAccessDenied(directErr) && errors.Is(mfaErr, &mfa.ErrNoMFADevices):
 		return nil, trace.Wrap(directErr)
 	case !errors.Is(mfaErr, io.EOF) && // Ignore any errors from MFA due to locks being enforced, the direct error will be friendlier
 		!errors.Is(mfaErr, MFARequiredUnknownErr{}) && // Ignore any failures that occurred before determining if MFA was required
@@ -2203,13 +2196,13 @@ func (tc *TeleportClient) connectToNodeWithMFA(ctx context.Context, clt *Cluster
 		return nil, trace.Wrap(services.ErrSessionMFANotRequired)
 	}
 
-	var cfg *ssh.ClientConfig
-	err := tc.retryWithAddingMFA(ctx, func() error {
-		var err error
-		// per-session mfa is required, perform the mfa ceremony
-		cfg, err = clt.SessionSSHConfig(ctx, user, nodeDetails)
-		return trace.Wrap(err)
-	})
+	// var cfg *ssh.ClientConfig
+	// err := tc.retryWithAddingMFA(ctx, func() error {
+	// 	var err error
+	// per-session mfa is required, perform the mfa ceremony
+	cfg, err := clt.SessionSSHConfig(ctx, user, nodeDetails)
+	// 	return trace.Wrap(err)
+	// })
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -2304,7 +2297,7 @@ func (tc *TeleportClient) runShellOrCommandOnSingleNode(ctx context.Context, clt
 // the user an opportunity to register an MFA device.
 func (tc *TeleportClient) retryWithAddingMFA(ctx context.Context, fn func() error) error {
 	origErr := fn()
-	if !errors.Is(origErr, authclient.ErrNoMFADevices) {
+	if !errors.Is(origErr, &mfa.ErrNoMFADevices) {
 		return trace.Wrap(origErr)
 	}
 

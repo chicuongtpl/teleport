@@ -419,16 +419,16 @@ func (c *CLIPrompt) promptSSO(ctx context.Context, chal *proto.MFAAuthenticateCh
 	return resp, trace.Wrap(err)
 }
 
-func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceConfig) (mfa.RegisterDeviceConfig, error) {
+func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceConfig) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
 	if !config.Confirmed {
 		yes, err := prompt.Confirmation(ctx, c.stdout(), prompt.Stdin(),
 			"\nYou have no MFA devices registered. Do you want to register a new one?",
 		)
 		if err != nil {
-			return mfa.RegisterDeviceConfig{}, err
+			return nil, nil, err
 		}
 		if !yes {
-			return mfa.RegisterDeviceConfig{}, nil
+			return nil, nil, nil
 		}
 	}
 
@@ -446,7 +446,7 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceCo
 			ctx, os.Stdout, prompt.Stdin(),
 			"Choose device type", deviceTypesFromSecondFactor(config.AuthSecondFactor)) // TODO: get second factors
 		if err != nil {
-			return mfa.RegisterDeviceConfig{}, trace.Wrap(err)
+			return nil, nil, trace.Wrap(err)
 		}
 	}
 
@@ -454,12 +454,12 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceCo
 		var err error
 		config.Name, err = prompt.Input(ctx, os.Stdout, prompt.Stdin(), "Enter device name")
 		if err != nil {
-			return mfa.RegisterDeviceConfig{}, trace.Wrap(err)
+			return nil, nil, trace.Wrap(err)
 		}
 	}
 	config.Name = strings.TrimSpace(config.Name)
 	if config.Name == "" {
-		return mfa.RegisterDeviceConfig{}, trace.BadParameter("device name cannot be empty")
+		return nil, nil, trace.BadParameter("device name cannot be empty")
 	}
 
 	switch config.Type {
@@ -468,7 +468,7 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceCo
 		if config.AllowPasswordlessSet && wancli.IsFIDO2Available() {
 			answer, err := prompt.PickOne(ctx, os.Stdout, prompt.Stdin(), "Allow passwordless logins", []string{"YES", "NO"})
 			if err != nil {
-				return mfa.RegisterDeviceConfig{}, trace.Wrap(err)
+				return nil, nil, trace.Wrap(err)
 			}
 			config.AllowPasswordless = answer == "YES"
 		}
@@ -478,10 +478,6 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceCo
 	}
 	slog.DebugContext(ctx, "tsh using passwordless registration?", "allow_passwordless", config.AllowPasswordless)
 
-	return mfa.RegisterDeviceConfig{}, nil
-}
-
-func (c *CLIPrompt) Register(ctx context.Context, chal *proto.MFARegisterChallenge, config mfa.RegisterDeviceConfig) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
 	// Tweak Windows platform messages so it's clear we whether we are prompting
 	// for the *registered* or *new* device.
 	// We do it here, preemptively, because it's the simpler solution (instead
@@ -493,9 +489,29 @@ func (c *CLIPrompt) Register(ctx context.Context, chal *proto.MFARegisterChallen
 	webauthnwin.SetPromptPlatformMessage(registeredMsg)
 	defer webauthnwin.ResetPromptPlatformMessage()
 
+	// TODO: avoid recursive registration if no challenge available. Probably as a promptOpt?
+	mfaResp, err := c.cfg.Ceremony.Run(ctx, &proto.CreateAuthenticateChallengeRequest{
+		ChallengeExtensions: &mfav1.ChallengeExtensions{
+			Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_MANAGE_DEVICES,
+		},
+	})
+	if err != nil {
+		return nil, nil, trace.Wrap(err)
+	}
+
+	regChal, err := c.cfg.Ceremony.CreateRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
+		// DeviceType:  config.ProtoType,
+		// DeviceUsage: config.ProtoUsage,
+		ExistingMFAResponse: mfaResp,
+	})
+	if err != nil {
+		return nil, nil, trace.Wrap(err)
+	}
+
 	// Prompt for registration.
 	webauthnwin.SetPromptPlatformMessage(newMsg)
-	return c.promptRegisterChallenge(ctx, c.cfg.ProxyAddress, config.Type, chal)
+	resp, callback, err := c.promptRegisterChallenge(ctx, c.cfg.ProxyAddress, config.Type, regChal)
+	return resp, callback, trace.Wrap(err)
 }
 
 func deviceTypesFromSecondFactor(sf constants.SecondFactorType) []string {

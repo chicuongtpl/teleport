@@ -146,6 +146,10 @@ func (p *mfaPrompt) AddMFA(ctx context.Context, spec mfa.RegisterDeviceConfig) (
 	return false, nil
 }
 
+func (f *mfaPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceConfig) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
+	return nil, nil, trace.NotImplemented("not supported")
+}
+
 func (p *mfaPrompt) promptMFA(ctx context.Context, req *api.PromptMFARequest) (*proto.MFAAuthenticateResponse, error) {
 	resp, err := p.promptAppMFA(ctx, req)
 	if err != nil {

@@ -80,6 +80,8 @@ func (tc *TeleportClient) addMFADevice(ctx context.Context, resp *proto.MFARegis
 		NewDeviceName:  config.Name,
 		NewMFAResponse: resp,
 		// DeviceUsage:    config.ProtoUsage,
+		// TODO: CHANGE BEFORE REVIEW
+		DeviceUsage: proto.DeviceUsage_DEVICE_USAGE_MFA,
 	})
 	return trace.Wrap(err)
 }
@@ -142,8 +144,8 @@ func (tc *TeleportClient) NewSSOMFACeremony(ctx context.Context) (mfa.SSOMFACere
 	return sso.NewCLIMFACeremony(rd), nil
 }
 
-func (tc *TeleportClient) AddMFA(ctx context.Context, spec mfa.RegisterDeviceConfig) (bool, error) {
-	if spec.Type == "" {
+func (tc *TeleportClient) AddMFA(ctx context.Context, rdc mfa.RegisterDeviceConfig) (bool, error) {
+	if rdc.Type == "" {
 		// If we are prompting the user for the device type, then take a glimpse at
 		// server-side settings and adjust the options accordingly.
 		// This is undesirable to do during flag setup, but we can do it here.
@@ -151,8 +153,8 @@ func (tc *TeleportClient) AddMFA(ctx context.Context, spec mfa.RegisterDeviceCon
 		if err != nil {
 			return false, trace.Wrap(err)
 		}
-		spec.AuthSecondFactor = pingResp.Auth.SecondFactor
+		rdc.AuthSecondFactor = pingResp.Auth.SecondFactor
 	}
-	added, err := tc.NewMFAPrompt().Register(ctx)
+	added, err := tc.NewMFACeremony().Register(ctx, rdc)
 	return added, trace.Wrap(err)
 }

@@ -220,7 +220,7 @@ func (c *mfaAddCommand) run(cf *CLIConf) error {
 		config.AuthSecondFactor = pingResp.Auth.SecondFactor
 	}
 
-	err = tc.NewMFACeremony().Register(ctx, config)
+	_, err = tc.NewMFACeremony().Register(ctx, config)
 	return trace.Wrap(err)
 }
 
