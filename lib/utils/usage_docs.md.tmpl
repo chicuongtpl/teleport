@@ -1,8 +1,3 @@
-{{define "FormatCommand" -}}
-{{if .Flags|AnyVisibleFlags}}{{if .FlagSummary }} {{.FlagSummary}}{{end}}{{end -}}
-    {{range .Args}}{{if not .Hidden}} {{ .|FormatUsageArg}}{{end}}{{end -}}
-{{end -}}
-
 {{ define "FormatCommands" -}}
 {{$appName := .Name -}}
 {{range .FlattenedCommands|SortCommandsByName -}}
@@ -13,7 +8,7 @@
 Usage:
 
 ```code
-$ {{$appName}} {{.FullCommand}}{{template "FormatCommand" .}}
+$ {{$appName}} {{.FullCommand}}{{if AnyVisibleFlags (printf "%v %v" $appName .FullCommand) .Flags}} [<flags>]{{end}}{{range .Args}}{{if not .Hidden}} {{ .|FormatUsageArg}}{{end}}{{end}}
 ```
 
 {{if AnyEnvVarsForCmd .Args .Flags -}}
@@ -25,12 +20,12 @@ Environment variables:
 
 {{end -}}
 
-{{ if .Flags|AnyVisibleFlags -}}
+{{ if AnyVisibleFlags (printf "%v %v" $appName .FullCommand) .Flags -}}
 Flags:
 
 |Flag|Default|Description|
 |---|---|---|
-{{- (ReplaceFlagDefaults (printf "%v %v" $appName .FullCommand) .Flags)|FlagsToRows|FormatThreeColMarkdownTable }}
+{{- FlagsToRows (printf "%v %v" $appName .FullCommand) (ReplaceFlagDefaults (printf "%v %v" $appName .FullCommand) .Flags)|FormatThreeColMarkdownTable }}
 
 {{end -}}
 {{ if .Args -}}
@@ -47,7 +42,7 @@ Arguments:
 
 {{define "FormatUsage" -}}
 ```code
-$ {{.Name}}{{template "FormatCommand" .}}{{if .Commands}} <command> [<args> ...]{{end}}
+$ {{.Name}}{{if AnyVisibleFlags .Name .Flags}} [<flags>]{{end}}{{range .Args}}{{if not .Hidden}} {{ .|FormatUsageArg}}{{end}}{{end}}{{if .Commands}} <command> [<args> ...]{{end}}
 ```
 
 {{end -}}
@@ -66,12 +61,12 @@ This guide provides a comprehensive list of commands, arguments, and flags for
 
 {{ .App.Help|Wrap 0 }}
 {{template "FormatUsage" .App -}}
-{{if .Context.Flags|AnyVisibleFlags -}}
+{{if AnyVisibleFlags .App.Name .Context.Flags -}}
 Global flags:
 
 |Flag|Default|Description|
 |---|---|---|
-{{- (ReplaceFlagDefaults .App.Name .Context.Flags)|FlagsToRows|FormatThreeColMarkdownTable}}
+{{- FlagsToRows .App.Name (ReplaceFlagDefaults .App.Name .Context.Flags)|FormatThreeColMarkdownTable}}
 
 {{end -}}
 {{if AnyEnvVarsForCmd .Context.Args .Context.Flags -}}

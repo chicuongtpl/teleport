@@ -61,43 +61,80 @@ func formatThreeColMarkdownTable(rows [][3]string) string {
 	return buf.String()
 }
 
-// flagsToRows outputs data for a table that lists flags, their default
-// values, and help texts.
-func flagsToRows(f []*kingpin.FlagModel) [][3]string {
-	rows := [][3]string{}
-
-	for _, flag := range f {
-		// Skip hidden flags and flags whose only purpose is to expose
-		// YAML-based default env variables.
-		if flag.Hidden || flag.Name == flag.Envar {
-			continue
+// makeFlagsToRows returns a template function that outputs data for a table
+// that lists flags, their default values, and help texts. Hidden flags are
+// shown if they belong to fullCommand in the overrides map.
+func makeFlagsToRows(overrides []hiddenFlagOverride) func(fullCommand string, f []*kingpin.FlagModel) [][3]string {
+	// maps full commands to the set of flag names that are unhidden
+	cmdToFlags := make(map[string]map[string]struct{})
+	for _, o := range overrides {
+		if _, ok := cmdToFlags[o.FullCommand]; !ok {
+			cmdToFlags[o.FullCommand] = make(map[string]struct{})
 		}
-		flagString := ""
-		flagName := flag.Name
-		if flag.IsBoolFlag() {
-			flagName = "[no-]" + flagName
-		}
-		if flag.Short != 0 {
-			flagString += fmt.Sprintf("`-%c`, `--%s`", flag.Short, flagName)
-		} else {
-			flagString += fmt.Sprintf("`--%s`", flagName)
-		}
-
-		rows = append(rows, [3]string{
-			flagString,
-			formatDefaultFlagValue(flag),
-			formatHelp(flag.Help),
-		})
+		cmdToFlags[o.FullCommand][o.Flag] = struct{}{}
 	}
-	return rows
+
+	return func(fullCommand string, f []*kingpin.FlagModel) [][3]string {
+		rows := [][3]string{}
+		overriddenFlags := cmdToFlags[fullCommand]
+
+		for _, flag := range f {
+			// Skip flags whose only purpose is to expose
+			// YAML-based default env variables.
+			if flag.Name == flag.Envar {
+				continue
+			}
+			// Skip hidden flags unless overridden for this command.
+			if flag.Hidden {
+				if _, ok := overriddenFlags[flag.Name]; !ok {
+					continue
+				}
+			}
+			flagString := ""
+			flagName := flag.Name
+			if flag.IsBoolFlag() {
+				flagName = "[no-]" + flagName
+			}
+			if flag.Short != 0 {
+				flagString += fmt.Sprintf("`-%c`, `--%s`", flag.Short, flagName)
+			} else {
+				flagString += fmt.Sprintf("`--%s`", flagName)
+			}
+
+			rows = append(rows, [3]string{
+				flagString,
+				formatDefaultFlagValue(flag),
+				formatHelp(flag.Help),
+			})
+		}
+		return rows
+	}
 }
 
-// anyVisibleFlags returns whether any flags in f are visible, i.e., should be
-// included in a table of flags.
-func anyVisibleFlags(f []*kingpin.FlagModel) bool {
-	return slices.ContainsFunc(f, func(m *kingpin.FlagModel) bool {
-		return !m.Hidden
-	})
+// makeAnyVisibleFlags returns a template function that reports whether any
+// flags in f are visible, i.e., should be included in a table of flags.
+// Hidden flags count as visible if they belong to fullCommand in the overrides
+// map.
+func makeAnyVisibleFlags(overrides []hiddenFlagOverride) func(fullCommand string, f []*kingpin.FlagModel) bool {
+	// maps full commands to the set of flag names that are unhidden
+	cmdToFlags := make(map[string]map[string]struct{})
+	for _, o := range overrides {
+		if _, ok := cmdToFlags[o.FullCommand]; !ok {
+			cmdToFlags[o.FullCommand] = make(map[string]struct{})
+		}
+		cmdToFlags[o.FullCommand][o.Flag] = struct{}{}
+	}
+
+	return func(fullCommand string, f []*kingpin.FlagModel) bool {
+		overriddenFlags := cmdToFlags[fullCommand]
+		return slices.ContainsFunc(f, func(m *kingpin.FlagModel) bool {
+			if !m.Hidden {
+				return true
+			}
+			_, ok := overriddenFlags[m.Name]
+			return ok
+		})
+	}
 }
 
 // anyEnvVarsForCmd indicates whether at least one of the arguments and flags
@@ -308,6 +345,8 @@ func updateAppUsageTemplate(r io.Reader, config generatorConfig, app *kingpin.Ap
 
 	replaceFlagDefaults := makeDefaultFlagValueOverrider(config.FlagDefaultOverrides)
 	replaceArgDefaults := makeDefaultArgValueOverrider(config.ArgDefaultOverrides)
+	flagsToRows := makeFlagsToRows(config.HiddenFlagOverrides)
+	anyVisibleFlags := makeAnyVisibleFlags(config.HiddenFlagOverrides)
 
 	// We override the default app description with a custom description
 	// that is better suited to the docs.
