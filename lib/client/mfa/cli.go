@@ -101,9 +101,10 @@ type CLIPromptConfig struct {
 	PreferSSO bool
 	// StdinFunc allows tests to override prompt.Stdin().
 	// If nil prompt.Stdin() is used.
-	StdinFunc  func() prompt.StdinReader
-	StdoutFunc func() io.Writer
-	RootClient ClusterClient
+	StdinFunc           func() prompt.StdinReader
+	StdoutFunc          func() io.Writer
+	RootClient          ClusterClient
+	CeremonyConstructor func() *mfa.Ceremony
 }
 
 // CLIPrompt is the default CLI mfa prompt implementation.
@@ -419,7 +420,7 @@ func (c *CLIPrompt) promptSSO(ctx context.Context, chal *proto.MFAAuthenticateCh
 	return resp, trace.Wrap(err)
 }
 
-func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceConfig) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
+func (c *CLIPrompt) AskRegister(ctx context.Context, config *mfa.RegisterDeviceConfig) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
 	if !config.Confirmed {
 		yes, err := prompt.Confirmation(ctx, c.stdout(), prompt.Stdin(),
 			"\nYou have no MFA devices registered. Do you want to register a new one?",
@@ -448,6 +449,15 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceCo
 		if err != nil {
 			return nil, nil, trace.Wrap(err)
 		}
+	}
+	devTypePB := map[string]proto.DeviceType{
+		totpDeviceType:     proto.DeviceType_DEVICE_TYPE_TOTP,
+		webauthnDeviceType: proto.DeviceType_DEVICE_TYPE_WEBAUTHN,
+		touchIDDeviceType:  proto.DeviceType_DEVICE_TYPE_WEBAUTHN,
+	}[config.Type]
+	// Sanity check.
+	if devTypePB == proto.DeviceType_DEVICE_TYPE_UNSPECIFIED {
+		return nil, nil, trace.BadParameter("unexpected device type: %q", config.Type)
 	}
 
 	if config.Name == "" {
@@ -490,7 +500,10 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceCo
 	defer webauthnwin.ResetPromptPlatformMessage()
 
 	// TODO: avoid recursive registration if no challenge available. Probably as a promptOpt?
-	mfaResp, err := c.cfg.Ceremony.Run(ctx, &proto.CreateAuthenticateChallengeRequest{
+	ceremony := c.cfg.CeremonyConstructor()
+	createRegisterChallenge := ceremony.CreateRegisterChallenge
+	ceremony.CreateRegisterChallenge = nil
+	mfaResp, err := ceremony.Run(ctx, &proto.CreateAuthenticateChallengeRequest{
 		ChallengeExtensions: &mfav1.ChallengeExtensions{
 			Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_MANAGE_DEVICES,
 		},
@@ -499,10 +512,11 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegisterDeviceCo
 		return nil, nil, trace.Wrap(err)
 	}
 
-	regChal, err := c.cfg.Ceremony.CreateRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
-		// DeviceType:  config.ProtoType,
-		// DeviceUsage: config.ProtoUsage,
+	regChal, err := createRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
 		ExistingMFAResponse: mfaResp,
+		DeviceType:          devTypePB,
+		// TODO: FIX BEFORE REVIEW
+		DeviceUsage: proto.DeviceUsage_DEVICE_USAGE_MFA,
 	})
 	if err != nil {
 		return nil, nil, trace.Wrap(err)

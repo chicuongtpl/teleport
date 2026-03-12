@@ -620,7 +620,7 @@ type CLIConf struct {
 
 	// WebauthnRegister allows tests to override the Webauthn Register func.
 	// Defaults to [wancli.Register].
-	// WebauthnRegister WebauthnRegisterFunc
+	WebauthnRegister client.WebauthnRegisterFunc
 
 	// LeafClusterName is the optional name of a leaf cluster to connect to instead
 	LeafClusterName string
@@ -4579,6 +4579,7 @@ func onSSH(cf *CLIConf, initFunc ClientInitFunc) error {
 	tc.Stdin = cf.Stdin()
 	err = retryWithAccessRequest(cf, tc, func() error {
 		sshFunc := func() error {
+			println("======== Entering sshFunc")
 			var opts []func(*client.SSHOptions)
 			if cf.LocalExec {
 				opts = append(opts, client.WithLocalCommandExecutor(runLocalCommand))
@@ -5203,6 +5204,7 @@ func loadClientConfigFromCLIConf(cf *CLIConf, proxy string) (*client.Config, err
 	c.DTAuthnRunCeremony = cf.DTAuthnRunCeremony
 	c.DTAutoEnroll = cf.DTAutoEnroll
 	c.WebauthnLogin = cf.WebauthnLogin
+	c.WebauthnRegister = cf.WebauthnRegister
 
 	// pass along MySQL/Postgres path overrides (only used in tests).
 	c.OverrideMySQLOptionFilePath = cf.overrideMySQLOptionFilePath

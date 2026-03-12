@@ -499,6 +499,10 @@ type Config struct {
 	// Defaults to [wancli.Login].
 	WebauthnLogin WebauthnLoginFunc
 
+	// WebauthnLogin allows tests to override the Webauthn Register func.
+	// Defaults to [wancli.Register].
+	WebauthnRegister WebauthnRegisterFunc
+
 	// SSHLogDir is the directory to log the output of multiple SSH commands to.
 	// If not set, no logs will be created.
 	SSHLogDir string

@@ -71,9 +71,10 @@ type PromptConfig struct {
 // NewPromptConfig returns a prompt config that will induce default behavior.
 func NewPromptConfig(proxyAddr string, opts ...mfa.PromptOpt) *PromptConfig {
 	cfg := &PromptConfig{
-		ProxyAddress:      proxyAddr,
-		WebauthnLoginFunc: wancli.Login,
-		WebauthnSupported: wancli.HasPlatformSupport(),
+		ProxyAddress:         proxyAddr,
+		WebauthnLoginFunc:    wancli.Login,
+		WebauthnRegisterFunc: wancli.Register,
+		WebauthnSupported:    wancli.HasPlatformSupport(),
 	}
 
 	for _, opt := range opts {

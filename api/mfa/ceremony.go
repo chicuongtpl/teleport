@@ -18,6 +18,7 @@ package mfa
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 
@@ -38,6 +39,9 @@ type Ceremony struct {
 	// SSOMFACeremonyConstructor is an optional SSO MFA ceremony constructor. If provided,
 	// the MFA ceremony will also attempt to retrieve an SSO MFA challenge.
 	SSOMFACeremonyConstructor SSOMFACeremonyConstructor
+
+	// TODO: REMOVE BEFORE REVIEW
+	IsClone bool
 }
 
 // SSOMFACeremony is an SSO MFA ceremony.
@@ -56,11 +60,18 @@ type CreateAuthenticateChallengeFunc func(ctx context.Context, req *proto.Create
 type CreateRegisterChallengeFunc func(ctx context.Context, req *proto.CreateRegisterChallengeRequest) (*proto.MFARegisterChallenge, error)
 type AddMFADeviceFunc func(ctx context.Context, req *proto.MFARegisterResponse, config RegisterDeviceConfig) error
 
+func (c *Ceremony) Clone() *Ceremony {
+	c2 := *c // Shallow copy is enough
+	c2.IsClone = true
+	return &c2
+}
+
 // Run the MFA ceremony.
 //
 // req may be nil if ceremony.CreateAuthenticateChallenge does not require it, e.g. in
 // the moderated session mfa ceremony which uses a custom stream rpc to create challenges.
 func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallengeRequest, promptOpts ...PromptOpt) (*proto.MFAAuthenticateResponse, error) {
+	fmt.Printf("========= Starting ceremony: %v\n", *c)
 	if c.CreateAuthenticateChallenge == nil {
 		return nil, trace.BadParameter("mfa ceremony must have CreateAuthenticateChallenge set in order to begin")
 	}
@@ -111,8 +122,15 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 	}
 
 	// If the user has no device registered, prompt them to register and then re-generate the challenge.
+	println("========= clone", c.IsClone)
+	println("========= challenge creator", c.CreateRegisterChallenge)
 	noRegisteredDevices := chal.WebauthnChallenge == nil && chal.SSOChallenge == nil && chal.TOTP == nil
 	if noRegisteredDevices && c.CreateRegisterChallenge != nil && c.AddMFADevice != nil {
+		println("Attempting to register")
+		// // Clone this ceremony and prevent the clone from recursively attempting to
+		// // register a device.
+		// c2 := c.Clone()
+		// c2.CreateRegisterChallenge = nil
 		added, err := c.Register(ctx, RegisterDeviceConfig{})
 		if err != nil {
 			return nil, trace.Wrap(err)
@@ -141,7 +159,7 @@ func (c *Ceremony) Register(ctx context.Context, config RegisterDeviceConfig) (b
 	regPrompt := c.PromptConstructor()
 
 	var err error
-	resp, callback, err := regPrompt.AskRegister(ctx, config)
+	resp, callback, err := regPrompt.AskRegister(ctx, &config)
 	if err != nil {
 		return false, trace.Wrap(err)
 	}

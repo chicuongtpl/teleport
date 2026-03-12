@@ -53,7 +53,7 @@ type RegisterCallback interface {
 type Prompt interface {
 	// Run prompts the user to complete an MFA authentication challenge.
 	Run(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error)
-	AskRegister(ctx context.Context, config RegisterDeviceConfig) (*proto.MFARegisterResponse, RegisterCallback, error)
+	AskRegister(ctx context.Context, config *RegisterDeviceConfig) (*proto.MFARegisterResponse, RegisterCallback, error)
 }
 
 // PromptFunc is a function wrapper that implements the Prompt interface.
@@ -64,7 +64,7 @@ func (f PromptFunc) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 	return f(ctx, chal)
 }
 
-func (f PromptFunc) AskRegister(ctx context.Context, config RegisterDeviceConfig) (*proto.MFARegisterResponse, RegisterCallback, error) {
+func (f PromptFunc) AskRegister(ctx context.Context, config *RegisterDeviceConfig) (*proto.MFARegisterResponse, RegisterCallback, error) {
 	return nil, nil, trace.NotImplemented("not supported")
 }
 
@@ -86,8 +86,6 @@ type PromptConfig struct {
 	Extensions *mfav1.ChallengeExtensions
 	// SSOMFACeremony is an SSO MFA ceremony.
 	SSOMFACeremony SSOMFACeremony
-	// Ceremony is an MFA ceremony.
-	Ceremony Ceremony
 }
 
 // DeviceDescriptor is a descriptor for a device, such as "registered".

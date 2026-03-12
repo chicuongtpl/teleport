@@ -92,19 +92,20 @@ type WebauthnLoginFunc = libmfa.WebauthnLoginFunc
 
 // WebauthnRegisterFunc is a function that performs WebAuthn registration.
 // Mimics the signature of [wancli.Register].
-type WebauthnRegisterFunc = libmfa.WebauthnLoginFunc
+type WebauthnRegisterFunc = libmfa.WebauthnRegisterFunc
 
 // NewMFAPrompt creates a new MFA prompt from client settings.
 func (tc *TeleportClient) NewMFAPrompt(opts ...mfa.PromptOpt) mfa.Prompt {
 	cfg := tc.newPromptConfig(opts...)
 
 	var prompt mfa.Prompt = libmfa.NewCLIPrompt(&libmfa.CLIPromptConfig{
-		PromptConfig:     *cfg,
-		Writer:           tc.Stderr,
-		PreferOTP:        tc.PreferOTP,
-		PreferSSO:        tc.PreferSSO,
-		AllowStdinHijack: tc.AllowStdinHijack,
-		StdinFunc:        tc.StdinFunc,
+		PromptConfig:        *cfg,
+		Writer:              tc.Stderr,
+		PreferOTP:           tc.PreferOTP,
+		PreferSSO:           tc.PreferSSO,
+		AllowStdinHijack:    tc.AllowStdinHijack,
+		StdinFunc:           tc.StdinFunc,
+		CeremonyConstructor: tc.NewMFACeremony,
 	})
 
 	if tc.MFAPromptConstructor != nil {
@@ -119,6 +120,7 @@ func (tc *TeleportClient) newPromptConfig(opts ...mfa.PromptOpt) *libmfa.PromptC
 	cfg.AuthenticatorAttachment = tc.AuthenticatorAttachment
 	if tc.WebauthnLogin != nil {
 		cfg.WebauthnLoginFunc = tc.WebauthnLogin
+		cfg.WebauthnRegisterFunc = tc.WebauthnRegister
 		cfg.WebauthnSupported = true
 	}
 
