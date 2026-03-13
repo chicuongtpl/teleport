@@ -479,6 +479,13 @@ func BrowserChallengeToProto(browserChal *BrowserMFAChallenge) *proto.BrowserMFA
 	}
 }
 
+// BrowserChallengeFromProto converts a BrowserChallenge to json compatible format
+func BrowserChallengeFromProto(browserChal *proto.BrowserMFAChallenge) *BrowserMFAChallenge {
+	return &BrowserMFAChallenge{
+		RequestID: browserChal.RequestId,
+	}
+}
+
 // initClient creates a new client to the HTTPS web proxy.
 func initClient(proxyAddr string, insecure bool, pool *x509.CertPool, extraHeaders map[string]string, opts ...roundtrip.ClientParam) (*WebClient, *url.URL, error) {
 	log := slog.With(teleport.ComponentKey, teleport.ComponentClient)
