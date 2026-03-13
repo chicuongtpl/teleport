@@ -1455,7 +1455,7 @@ func (a *AuthenticateUserRequest) CheckAndSetDefaults() error {
 	case a.Username == "" && a.Webauthn != nil: // OK, passwordless.
 	case a.Username == "":
 		return trace.BadParameter("missing parameter 'username'")
-	case a.Pass == nil && a.Webauthn == nil && a.OTP == nil && a.Session == nil && a.HeadlessAuthenticationID == "":
+	case a.Pass == nil && a.Webauthn == nil && a.OTP == nil && a.Session == nil && a.HeadlessAuthenticationID == "" && a.BrowserMFA == nil:
 		return trace.BadParameter("at least one authentication method is required")
 	}
 	return nil
