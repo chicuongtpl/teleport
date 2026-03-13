@@ -692,8 +692,6 @@ type CLIConf struct {
 	// addMFAIfRequired tells `tsh ssh` to offer adding an MFA device if it's
 	// required, but the user doesn't have one.
 	addMFAIfRequired bool
-	// Function that will be used by Teleport client to add a new MFA device.
-	mfaAdder client.MFAAdderFunc
 }
 
 func (c *CLIConf) isForkAuthChild() bool {
@@ -1008,7 +1006,7 @@ func Run(ctx context.Context, args []string, opts ...CliOption) error {
 	ssh.Flag("no-resume", "Disable SSH connection resumption.").Envar(noResumeEnvVar).BoolVar(&cf.DisableSSHResumption)
 	ssh.Flag("relogin", "Permit performing an authentication attempt on a failed command.").Default("true").BoolVar(&cf.Relogin)
 	ssh.Flag("fork-after-authentication", "Run in background after authentication is complete.").Short('f').BoolVar(&cf.ForkAfterAuthentication)
-	ssh.Flag("add-mfa", "Offer registering an MFA device if required").Default("true").BoolVar(&cf.addMFAIfRequired)
+	ssh.Flag("add-mfa", "Offer registering an MFA device if required.").Default("true").BoolVar(&cf.addMFAIfRequired)
 	// The following flags are OpenSSH compatibility flags. They are used for
 	// users that alias "ssh" to "tsh ssh." The following OpenSSH flags are
 	// implemented. From "man 1 ssh":
@@ -4579,7 +4577,6 @@ func onSSH(cf *CLIConf, initFunc ClientInitFunc) error {
 	tc.Stdin = cf.Stdin()
 	err = retryWithAccessRequest(cf, tc, func() error {
 		sshFunc := func() error {
-			println("======== Entering sshFunc")
 			var opts []func(*client.SSHOptions)
 			if cf.LocalExec {
 				opts = append(opts, client.WithLocalCommandExecutor(runLocalCommand))
@@ -5232,6 +5229,8 @@ func loadClientConfigFromCLIConf(cf *CLIConf, proxy string) (*client.Config, err
 	default:
 		c.RelayAddr = cf.Relay
 	}
+
+	c.RegisterMFADeviceIfRequired = cf.addMFAIfRequired
 
 	return c, nil
 }

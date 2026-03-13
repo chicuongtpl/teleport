@@ -20,6 +20,7 @@ package client
 
 import (
 	"context"
+	"io"
 
 	"github.com/gravitational/trace"
 
@@ -31,13 +32,19 @@ import (
 
 // NewMFACeremony returns a new MFA ceremony configured for this client.
 func (tc *TeleportClient) NewMFACeremony() *mfa.Ceremony {
-	return &mfa.Ceremony{
+	c := &mfa.Ceremony{
 		CreateAuthenticateChallenge: tc.createAuthenticateChallenge,
-		CreateRegisterChallenge:     tc.createRegisterChallenge,
-		AddMFADevice:                tc.addMFADevice,
 		PromptConstructor:           tc.NewMFAPrompt,
 		SSOMFACeremonyConstructor:   tc.NewSSOMFACeremony,
+		Ping:                        tc.Ping,
 	}
+
+	if tc.RegisterMFADeviceIfRequired {
+		c.AddMFADevice = tc.addMFADevice
+		c.CreateRegisterChallenge = tc.createRegisterChallenge
+	}
+
+	return c
 }
 
 // createAuthenticateChallenge creates and returns MFA challenges for a users registered MFA devices.
@@ -105,6 +112,7 @@ func (tc *TeleportClient) NewMFAPrompt(opts ...mfa.PromptOpt) mfa.Prompt {
 		PreferSSO:           tc.PreferSSO,
 		AllowStdinHijack:    tc.AllowStdinHijack,
 		StdinFunc:           tc.StdinFunc,
+		StdoutFunc:          func() io.Writer { return tc.Stdout },
 		CeremonyConstructor: tc.NewMFACeremony,
 	})
 

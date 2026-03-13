@@ -422,7 +422,7 @@ func (c *CLIPrompt) promptSSO(ctx context.Context, chal *proto.MFAAuthenticateCh
 
 func (c *CLIPrompt) AskRegister(ctx context.Context, config *mfa.RegisterDeviceConfig) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
 	if !config.Confirmed {
-		yes, err := prompt.Confirmation(ctx, c.stdout(), prompt.Stdin(),
+		yes, err := prompt.Confirmation(ctx, c.stdout(), c.stdin(),
 			"\nYou have no MFA devices registered. Do you want to register a new one?",
 		)
 		if err != nil {
@@ -444,7 +444,7 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config *mfa.RegisterDeviceC
 	if config.Type == "" {
 		var err error
 		config.Type, err = prompt.PickOne(
-			ctx, os.Stdout, prompt.Stdin(),
+			ctx, c.stdout(), c.stdin(),
 			"Choose device type", deviceTypesFromSecondFactor(config.AuthSecondFactor)) // TODO: get second factors
 		if err != nil {
 			return nil, nil, trace.Wrap(err)
@@ -462,7 +462,7 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config *mfa.RegisterDeviceC
 
 	if config.Name == "" {
 		var err error
-		config.Name, err = prompt.Input(ctx, os.Stdout, prompt.Stdin(), "Enter device name")
+		config.Name, err = prompt.Input(ctx, c.stdout(), c.stdin(), "Enter device name")
 		if err != nil {
 			return nil, nil, trace.Wrap(err)
 		}
@@ -476,7 +476,7 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config *mfa.RegisterDeviceC
 	case webauthnDeviceType:
 		// Ask the user?
 		if config.AllowPasswordlessSet && wancli.IsFIDO2Available() {
-			answer, err := prompt.PickOne(ctx, os.Stdout, prompt.Stdin(), "Allow passwordless logins", []string{"YES", "NO"})
+			answer, err := prompt.PickOne(ctx, c.stdout(), c.stdin(), "Allow passwordless logins", []string{"YES", "NO"})
 			if err != nil {
 				return nil, nil, trace.Wrap(err)
 			}

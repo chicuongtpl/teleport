@@ -2748,7 +2748,8 @@ func TestSSHAddingMFA(t *testing.T) {
 	})
 
 	const greeting = "Hello from the other side"
-	const mfaPromptQuestion = "You have no MFA devices registered. Do you want to register a new one?"
+	const mfaRegistrationQuestion = "You have no MFA devices registered. Do you want to register a new one?"
+	const mfaDeviceTypePrompt = "Choose device type [WEBAUTHN]"
 
 	testCases := []struct {
 		name      string
@@ -2763,7 +2764,8 @@ func TestSSHAddingMFA(t *testing.T) {
 				var exiterr *common.ExitCodeError
 				require.ErrorAs(t, err, &exiterr)
 				assert.Equal(t, 1, exiterr.Code)
-				assert.Contains(t, stdout, mfaPromptQuestion)
+				assert.Contains(t, stdout, mfaRegistrationQuestion)
+				assert.NotContains(t, stdout, mfaDeviceTypePrompt)
 				assert.NotContains(t, stdout, greeting)
 			},
 		},
@@ -2776,7 +2778,8 @@ func TestSSHAddingMFA(t *testing.T) {
 				require.ErrorAs(t, err, &exiterr)
 				assert.Equal(t, 1, exiterr.Code)
 				// In this case, tsh ssh shouldn't even ask.
-				assert.NotContains(t, stdout, mfaPromptQuestion)
+				assert.NotContains(t, stdout, mfaRegistrationQuestion)
+				assert.NotContains(t, stdout, mfaDeviceTypePrompt)
 				assert.NotContains(t, stdout, greeting)
 			},
 		},
@@ -2789,9 +2792,8 @@ func TestSSHAddingMFA(t *testing.T) {
 				AddString("n"),        // Don't allow passwordless
 			assertFn: func(t *testing.T, stdout string, err error) {
 				require.NoError(t, err)
-				assert.Contains(t, stdout, mfaPromptQuestion)
-				// The actual MFA registration dialog output goes directly to the system
-				// stream, not the injected stdout, so we can't easily verify it.
+				assert.Contains(t, stdout, mfaRegistrationQuestion)
+				assert.Contains(t, stdout, mfaDeviceTypePrompt)
 				assert.Contains(t, stdout, greeting)
 			},
 		},

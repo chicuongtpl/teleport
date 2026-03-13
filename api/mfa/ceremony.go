@@ -25,6 +25,7 @@ import (
 	"github.com/gravitational/trace"
 
 	"github.com/gravitational/teleport/api/client/proto"
+	"github.com/gravitational/teleport/api/client/webclient"
 	mfav1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/mfa/v1"
 )
 
@@ -34,6 +35,7 @@ type Ceremony struct {
 	CreateAuthenticateChallenge CreateAuthenticateChallengeFunc
 	CreateRegisterChallenge     CreateRegisterChallengeFunc
 	AddMFADevice                AddMFADeviceFunc
+	Ping                        PingFunc
 	// PromptConstructor creates a prompt to prompt the user to solve an authentication challenge.
 	PromptConstructor PromptConstructor
 	// SSOMFACeremonyConstructor is an optional SSO MFA ceremony constructor. If provided,
@@ -59,6 +61,7 @@ type SSOMFACeremonyConstructor func(ctx context.Context) (SSOMFACeremony, error)
 type CreateAuthenticateChallengeFunc func(ctx context.Context, req *proto.CreateAuthenticateChallengeRequest) (*proto.MFAAuthenticateChallenge, error)
 type CreateRegisterChallengeFunc func(ctx context.Context, req *proto.CreateRegisterChallengeRequest) (*proto.MFARegisterChallenge, error)
 type AddMFADeviceFunc func(ctx context.Context, req *proto.MFARegisterResponse, config RegisterDeviceConfig) error
+type PingFunc func(ctx context.Context) (*webclient.PingResponse, error)
 
 func (c *Ceremony) Clone() *Ceremony {
 	c2 := *c // Shallow copy is enough
@@ -158,10 +161,23 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 func (c *Ceremony) Register(ctx context.Context, config RegisterDeviceConfig) (bool, error) {
 	regPrompt := c.PromptConstructor()
 
-	var err error
+	if config.Type == "" {
+		// If we are prompting the user for the device type, then take a glimpse at
+		// server-side settings and adjust the options accordingly.
+		// This is undesirable to do during flag setup, but we can do it here.
+		pingResp, err := c.Ping(ctx)
+		if err != nil {
+			return false, trace.Wrap(err)
+		}
+		config.AuthSecondFactor = pingResp.Auth.SecondFactor
+	}
+
 	resp, callback, err := regPrompt.AskRegister(ctx, &config)
 	if err != nil {
 		return false, trace.Wrap(err)
+	}
+	if resp == nil || callback == nil {
+		return false, err
 	}
 
 	if err = c.AddMFADevice(ctx, resp, config); err != nil {

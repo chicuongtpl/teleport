@@ -540,6 +540,8 @@ type Config struct {
 
 	// ProxyTemplates describe rules for parsing out proxy out of full hostnames.
 	ProxyTemplates ProxyTemplates
+
+	RegisterMFADeviceIfRequired bool
 }
 
 // CachePolicy defines cache policy for local clients
@@ -2294,48 +2296,6 @@ func (tc *TeleportClient) runShellOrCommandOnSingleNode(ctx context.Context, clt
 		return nodeClient.RunCommand(ctx, command)
 	}
 	return trace.Wrap(nodeClient.RunInteractiveShell(ctx, "", "", nil))
-}
-
-// retryWithAddingMFA calls the given fn function. If fn returns an
-// [authclient.ErrNoMFADevice] error, fn will be called once again after giving
-// the user an opportunity to register an MFA device.
-func (tc *TeleportClient) retryWithAddingMFA(ctx context.Context, fn func() error) error {
-	origErr := fn()
-	if !errors.Is(origErr, &mfa.ErrNoMFADevices) {
-		return trace.Wrap(origErr)
-	}
-
-	// yes, err := prompt.Confirmation(ctx, cf.Stdout(), prompt.Stdin(),
-	// 	"\nYou have no MFA devices registered. Do you want to register a new one?",
-	// )
-	// if err != nil {
-	// 	return err
-	// }
-	// if !yes {
-	// 	return trace.Wrap(origErr)
-	// }
-
-	added, err := tc.AddMFA(ctx, mfa.RegisterDeviceConfig{})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	if !added {
-		return trace.Wrap(origErr)
-	}
-
-	// Retry.
-	return trace.Wrap(fn())
-
-	// adder := mfaAdder{}
-	// adder.setWebauthnRegisterFunc(cf.WebauthnRegister)
-	// err = adder.addMFA(ctx, tc)
-	// if err != nil {
-	// 	return trace.Wrap(err)
-	// }
-
-	// fmt.Fprintln(cf.Stdout())
-	// tc.SetExitStatus(0)
-	// return trace.Wrap(fn())
 }
 
 func (tc *TeleportClient) runShellOrCommandOnMultipleNodes(ctx context.Context, clt *ClusterClient, nodes []TargetNode, command []string) error {
