@@ -124,6 +124,22 @@ func TestBrowserMFAChallengeCreation(t *testing.T) {
 	samlUser, samlRole, err := authtest.CreateUserAndRole(a, "saml-user", []string{"role"}, nil)
 	require.NoError(t, err)
 
+	// Add a WebAuthn device so this case verifies SSO MFA exclusion rather than
+	// the absence of registered MFA devices.
+	samlWebauthnDev, err := types.NewMFADevice("saml-webauthn-device", "saml-webauthn-device-id", env.clock.Now(), &types.MFADevice_Webauthn{
+		Webauthn: &types.WebauthnDevice{
+			CredentialId:     []byte("saml-credential-id"),
+			PublicKeyCbor:    []byte("saml-public-key"),
+			AttestationType:  "none",
+			Aaguid:           []byte("saml-aaguid"),
+			SignatureCounter: 0,
+			ResidentKey:      false,
+		},
+	})
+	require.NoError(t, err)
+	err = a.UpsertMFADevice(ctx, samlUser.GetName(), samlWebauthnDev)
+	require.NoError(t, err)
+
 	samlConnector, err := types.NewSAMLConnector("saml", types.SAMLConnectorSpecV2{
 		AssertionConsumerService: "http://localhost:65535/acs",
 		Issuer:                   "test",
@@ -139,6 +155,16 @@ func TestBrowserMFAChallengeCreation(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = a.UpsertSAMLConnector(ctx, samlConnector)
+	require.NoError(t, err)
+
+	samlUser.SetCreatedBy(types.CreatedBy{
+		Time: env.clock.Now(),
+		Connector: &types.ConnectorRef{
+			ID:   samlConnector.GetName(),
+			Type: samlConnector.GetKind(),
+		},
+	})
+	_, err = a.UpsertUser(ctx, samlUser)
 	require.NoError(t, err)
 
 	loginExt := &mfav1.ChallengeExtensions{
