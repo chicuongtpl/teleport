@@ -54,6 +54,7 @@ export function Audit(props: State) {
     clusterId,
     fetchNextPage,
     hasNextPage,
+    isPlaceholderData,
     isFetchingNextPage,
     error,
     isLoading,
@@ -85,6 +86,11 @@ export function Audit(props: State) {
       fetchNextPage();
     }
   };
+
+  const showSkeleton =
+    (isLoading && events.length === 0) ||
+    isFetchingNextPage ||
+    isPlaceholderData;
 
   return (
     <FeatureBox unsetHeight>
@@ -121,7 +127,7 @@ export function Audit(props: State) {
           hideAdvancedSearch={true}
           filter={{ search }}
         />
-        {!isLoading && (
+        {!isLoading && !isPlaceholderData && (
           <EventList
             events={events}
             search={search}
@@ -130,9 +136,7 @@ export function Audit(props: State) {
             setSort={setSort}
           />
         )}
-        {((isLoading && events.length === 0) || isFetchingNextPage) && (
-          <EventListSkeleton />
-        )}
+        {showSkeleton && <EventListSkeleton />}
         <div ref={setTrigger} />
         {isError && events.length > 0 && !isLoading && (
           <Box mt={2} textAlign="center">

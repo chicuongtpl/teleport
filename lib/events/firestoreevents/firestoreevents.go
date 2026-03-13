@@ -369,7 +369,7 @@ func (l *Log) SearchEvents(ctx context.Context, req events.SearchEventsRequest) 
 			limit:     req.Limit,
 			order:     req.Order,
 			lastKey:   req.StartKey,
-			filter:    searchEventsFilter{eventTypes: req.EventTypes},
+			filter:    searchEventsFilter{eventTypes: req.EventTypes, search: req.Search},
 			sessionID: "",
 		})
 	if err != nil {
@@ -520,6 +520,13 @@ func (l *Log) query(
 				return nil, "", trace.Errorf("failed to unmarshal event %v", err)
 			}
 
+			if filter.search != "" && !events.MatchSearch(filter.search, string(data)) {
+				checkpointTime = docSnap.Data()[createdAtDocProperty].(int64)
+				docID = docSnap.Ref.ID
+				lastKey = strconv.FormatInt(checkpointTime, 10) + ":" + docID
+				continue
+			}
+
 			// if the total size of the events exceeds the limit, return the events
 			// collected so far and the last key to resume the query.
 			if totalSize+len(data) >= events.MaxEventBytesInResponse {
@@ -588,6 +595,7 @@ func (l *Log) GetEventExportChunks(ctx context.Context, req *auditlogpb.GetEvent
 
 type searchEventsFilter struct {
 	eventTypes []string
+	search     string
 	condition  utils.FieldsCondition
 }
 
@@ -663,7 +671,7 @@ func (l *Log) SearchUnstructuredEvents(ctx context.Context, req events.SearchEve
 			limit:     req.Limit,
 			order:     req.Order,
 			lastKey:   req.StartKey,
-			filter:    searchEventsFilter{eventTypes: req.EventTypes},
+			filter:    searchEventsFilter{eventTypes: req.EventTypes, search: req.Search},
 			sessionID: "",
 		})
 
