@@ -121,6 +121,11 @@ func (m *MFACeremony) GetProxyAddress() string {
 
 // Run the SSO MFA ceremony.
 func (m *MFACeremony) Run(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+	// TODO(danielashare): Remove when Browser MFA challenge handling is implemented
+	if chal.SSOChallenge == nil {
+		return nil, trace.BadParameter("no SSO challenge provided")
+	}
+
 	if err := m.HandleRedirect(ctx, chal.SSOChallenge.RedirectUrl); err != nil {
 		return nil, trace.Wrap(err)
 	}
