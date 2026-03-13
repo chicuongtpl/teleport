@@ -88,7 +88,7 @@ func (tc *TeleportClient) newPromptConfig(opts ...mfa.PromptOpt) *libmfa.PromptC
 }
 
 // NewRedirectorMFACeremony creates a new redirector for SSO or Browser MFA ceremony.
-func (tc *TeleportClient) NewRedirectorMFACeremony(ctx context.Context) (mfa.SSOMFACeremony, error) {
+func (tc *TeleportClient) NewRedirectorMFACeremony(ctx context.Context) (mfa.MFACeremony, error) {
 	rdConfig, err := tc.ssoRedirectorConfig(ctx, "" /*connectorDisplayName*/)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -99,8 +99,8 @@ func (tc *TeleportClient) NewRedirectorMFACeremony(ctx context.Context) (mfa.SSO
 		return nil, trace.Wrap(err, "failed to create a redirector for SSO MFA")
 	}
 
-	if tc.SSOMFACeremonyConstructor != nil {
-		return tc.SSOMFACeremonyConstructor(rd), nil
+	if tc.MFACeremonyConstructor != nil {
+		return tc.MFACeremonyConstructor(rd), nil
 	}
 
 	return sso.NewCLIMFACeremony(rd), nil

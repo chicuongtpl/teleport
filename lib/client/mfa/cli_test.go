@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gravitational/teleport/api/client/proto"
+	"github.com/gravitational/teleport/api/constants"
 	mfav1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/mfa/v1"
 	webauthnpb "github.com/gravitational/teleport/api/types/webauthn"
 	"github.com/gravitational/teleport/api/utils/prompt"
@@ -152,6 +153,33 @@ func TestCLIPrompt(t *testing.T) {
 			expectResp: &proto.MFAAuthenticateResponse{
 				Response: &proto.MFAAuthenticateResponse_Webauthn{
 					Webauthn: &webauthnpb.CredentialAssertionResponse{},
+				},
+			},
+		},
+		{
+			name:         "OK prefer browser when specified",
+			expectStdOut: "", // stdout is handled internally in the MFA ceremony, which is mocked in this test.
+			challenge: &proto.MFAAuthenticateChallenge{
+				WebauthnChallenge:   &webauthnpb.CredentialAssertion{},
+				TOTP:                &proto.TOTPChallenge{},
+				SSOChallenge:        &proto.SSOChallenge{},
+				BrowserMFAChallenge: &proto.BrowserMFAChallenge{},
+			},
+			modifyPromptConfig: func(cfg *mfa.CLIPromptConfig) {
+				cfg.PreferBrowser = true
+				cfg.MFACeremony = &mockSSOMFACeremony{
+					runFunc: func(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+						return &proto.MFAAuthenticateResponse{
+							Response: &proto.MFAAuthenticateResponse_Browser{
+								Browser: &proto.BrowserMFAResponse{RequestId: "request-id"},
+							},
+						}, nil
+					},
+				}
+			},
+			expectResp: &proto.MFAAuthenticateResponse{
+				Response: &proto.MFAAuthenticateResponse_Browser{
+					Browser: &proto.BrowserMFAResponse{RequestId: "request-id"},
 				},
 			},
 		},
@@ -499,6 +527,39 @@ Enter your security key PIN:
 					},
 				},
 			},
+		},
+		{
+			name: "NOK browser fallback skipped on windows when not preferred",
+			expectStdOut: "" +
+				"Available MFA methods [WEBAUTHN, BROWSER]. Continuing with WEBAUTHN.\n" +
+				"If you wish to perform MFA with another method, specify with flag --mfa-mode=<webauthn,browser> or environment variable TELEPORT_MFA_MODE=<webauthn,browser>.\n\n" +
+				"Tap any security key\n" +
+				"MFA authentication with WEBAUTHN failed, check logs for details\n",
+			challenge: &proto.MFAAuthenticateChallenge{
+				WebauthnChallenge:   &webauthnpb.CredentialAssertion{},
+				BrowserMFAChallenge: &proto.BrowserMFAChallenge{},
+			},
+			makeWebauthnLoginFunc: func(_ *prompt.FakeReader) mfa.WebauthnLoginFunc {
+				return func(ctx context.Context, origin string, assertion *wantypes.CredentialAssertion, prompt wancli.LoginPrompt, opts *wancli.LoginOpts) (*proto.MFAAuthenticateResponse, string, error) {
+					if _, err := prompt.PromptTouch(); err != nil {
+						return nil, "", trace.Wrap(err)
+					}
+					return nil, "", context.DeadlineExceeded
+				}
+			},
+			modifyPromptConfig: func(cfg *mfa.CLIPromptConfig) {
+				cfg.RuntimeOS = constants.WindowsOS
+				cfg.MFACeremony = &mockSSOMFACeremony{
+					runFunc: func(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
+						return &proto.MFAAuthenticateResponse{
+							Response: &proto.MFAAuthenticateResponse_Browser{
+								Browser: &proto.BrowserMFAResponse{RequestId: "request-id"},
+							},
+						}, nil
+					},
+				}
+			},
+			expectErr: context.DeadlineExceeded,
 		},
 		{
 			name: "OK prompt fallback webauthn > SSO > browser MFA",

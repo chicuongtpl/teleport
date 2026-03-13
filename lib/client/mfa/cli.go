@@ -73,6 +73,8 @@ type CLIPromptConfig struct {
 	// StdinFunc allows tests to override prompt.Stdin().
 	// If nil prompt.Stdin() is used.
 	StdinFunc func() prompt.StdinReader
+	// RuntimeOS overrides runtime.GOOS. Intended for tests only.
+	RuntimeOS string
 }
 
 // CLIPrompt is the default CLI mfa prompt implementation.
@@ -103,6 +105,13 @@ func (c *CLIPrompt) writer() io.Writer {
 		return os.Stderr
 	}
 	return c.cfg.Writer
+}
+
+func (c *CLIPrompt) getOS() string {
+	if c.cfg.RuntimeOS != "" {
+		return c.cfg.RuntimeOS
+	}
+	return runtime.GOOS
 }
 
 // mfaPromptState represents which MFA methods are available to prompt.
@@ -264,7 +273,7 @@ func (c *CLIPrompt) promptWithFallback(ctx context.Context, chal *proto.MFAAuthe
 	// skip Browser MFA. They will have access to the same MFA methods using the
 	// WebAuthn.dll prompt.
 	skipBrowserMFAFallback := false
-	if state.promptBrowser && !c.cfg.PreferBrowser && runtime.GOOS == constants.WindowsOS {
+	if state.promptBrowser && !c.cfg.PreferBrowser && c.getOS() == constants.WindowsOS {
 		skipBrowserMFAFallback = true
 		slog.DebugContext(ctx, "Skipping Browser MFA fallback on Windows (WebAuthn.dll provides same functionality)")
 	}
@@ -409,7 +418,7 @@ func (c *CLIPrompt) promptDevicePrefix() string {
 func (c *CLIPrompt) promptWebauthnAndOTP(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error) {
 	spawnGoroutines := func(ctx context.Context, wg *sync.WaitGroup, respC chan<- MFAGoroutineResponse) {
 		var message string
-		if runtime.GOOS == constants.WindowsOS {
+		if c.getOS() == constants.WindowsOS {
 			message = "Follow the OS dialogs for platform authentication, or enter an OTP code here:"
 			webauthnwin.SetPromptPlatformMessage("")
 		} else {

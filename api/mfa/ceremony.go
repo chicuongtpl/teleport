@@ -38,8 +38,8 @@ type Ceremony struct {
 	MFACeremonyConstructor MFACeremonyConstructor
 }
 
-// SSOMFACeremony is an SSO MFA ceremony.
-type SSOMFACeremony interface {
+// MFACeremony is an SSO/Browser MFA ceremony.
+type MFACeremony interface {
 	GetClientCallbackURL() string
 	GetProxyAddress() string
 	Run(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error)
@@ -47,7 +47,7 @@ type SSOMFACeremony interface {
 }
 
 // MFACeremonyConstructor constructs a new SSO or Browser MFA ceremony.
-type MFACeremonyConstructor func(ctx context.Context) (SSOMFACeremony, error)
+type MFACeremonyConstructor func(ctx context.Context) (MFACeremony, error)
 
 // CreateAuthenticateChallengeFunc is a function that creates an authentication challenge.
 type CreateAuthenticateChallengeFunc func(ctx context.Context, req *proto.CreateAuthenticateChallengeRequest) (*proto.MFAAuthenticateChallenge, error)
@@ -64,13 +64,13 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 	// If available, prepare an MFA ceremony and set the client redirect URL in the challenge
 	// request to request an SSO or Browser MFA challenge in addition to other challenges.
 	if c.MFACeremonyConstructor != nil {
-		MFACeremony, err := c.MFACeremonyConstructor(ctx)
+		mfaCeremony, err := c.MFACeremonyConstructor(ctx)
 		if err != nil {
 			// We may fail to start the MFA flow in cases where the Proxy is down or broken. Fall
 			// back to skipping SSO/Browser MFA, especially since SSO/Browser MFA may not even be allowed on the server.
-			slog.DebugContext(ctx, "Failed to attempt SSO MFA, continuing with other MFA methods", "error", err)
+			slog.DebugContext(ctx, "Failed to attempt SSO/Browser MFA, continuing with other MFA methods", "error", err)
 		} else {
-			defer MFACeremony.Close()
+			defer mfaCeremony.Close()
 
 			// req may be nil in cases where the ceremony's CreateAuthenticateChallenge sources
 			// its own req or uses a different e.g. login. We should still provide the sso client
@@ -79,13 +79,13 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 				req = new(proto.CreateAuthenticateChallengeRequest)
 			}
 
-			req.SSOClientRedirectURL = MFACeremony.GetClientCallbackURL()
+			req.SSOClientRedirectURL = mfaCeremony.GetClientCallbackURL()
 			// Reuse the same callback server for Browser MFA because only one of
 			// SSO MFA or Browser MFA can be used. Sending both redirect URLs
 			// indicates to the server that both methods are available.
-			req.BrowserMFATSHRedirectURL = MFACeremony.GetClientCallbackURL()
-			req.ProxyAddress = MFACeremony.GetProxyAddress()
-			promptOpts = append(promptOpts, withSSOMFACeremony(MFACeremony))
+			req.BrowserMFATSHRedirectURL = mfaCeremony.GetClientCallbackURL()
+			req.ProxyAddress = mfaCeremony.GetProxyAddress()
+			promptOpts = append(promptOpts, withSSOMFACeremony(mfaCeremony))
 		}
 	}
 

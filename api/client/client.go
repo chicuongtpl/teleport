@@ -741,8 +741,8 @@ func (c *Client) SetMFAPromptConstructor(pc mfa.PromptConstructor) {
 }
 
 // SetMFACeremonyConstructor sets the MFA ceremony constructor for this client.
-func (c *Client) SetMFACeremonyConstructor(scc mfa.MFACeremonyConstructor) {
-	c.c.MFACeremonyConstructor = scc
+func (c *Client) SetMFACeremonyConstructor(mcc mfa.MFACeremonyConstructor) {
+	c.c.MFACeremonyConstructor = mcc
 }
 
 // Close closes the Client connection to the auth server.

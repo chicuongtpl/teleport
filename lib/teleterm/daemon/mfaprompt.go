@@ -75,6 +75,14 @@ func (p *mfaPrompt) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 	promptOTP := chal.TOTP != nil
 	promptWebauthn := chal.WebauthnChallenge != nil && p.cfg.WebauthnSupported
 	promptSSO := chal.SSOChallenge != nil && p.cfg.MFACeremony != nil
+	promptBrowser := chal.BrowserMFAChallenge != nil
+
+	if promptBrowser && !promptOTP && !promptWebauthn && !promptSSO {
+		return nil, trace.AccessDenied(
+			"Browser MFA was the only challenge returned and is not supported in Connect yet",
+		)
+	}
+
 	scope := p.cfg.Extensions.GetScope()
 	// No prompt to run, no-op.
 	if !promptOTP && !promptWebauthn && !promptSSO {

@@ -171,7 +171,7 @@ func NewCLIMFACeremony(rd *Redirector) *MFACeremony {
 }
 
 // NewConnectMFACeremony creates a new Teleport Connect SSO ceremony from the given redirector.
-func NewConnectMFACeremony(rd *Redirector) mfa.SSOMFACeremony {
+func NewConnectMFACeremony(rd *Redirector) mfa.MFACeremony {
 	return &MFACeremony{
 		close:             rd.Close,
 		ClientCallbackURL: rd.ClientCallbackURL,

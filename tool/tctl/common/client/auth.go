@@ -112,7 +112,7 @@ func GetInitFunc(ccf tctlcfg.GlobalCLIFlags, cfg *servicecfg.Config) InitFunc {
 				PreferBrowser: mfaOpts.PreferBrowser,
 			})
 		})
-		client.SetMFACeremonyConstructor(func(ctx context.Context) (mfa.SSOMFACeremony, error) {
+		client.SetMFACeremonyConstructor(func(ctx context.Context) (mfa.MFACeremony, error) {
 			rdConfig := sso.RedirectorConfig{
 				ProxyAddr: proxyAddr,
 			}

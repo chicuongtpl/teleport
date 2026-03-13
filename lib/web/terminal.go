@@ -632,7 +632,7 @@ func newMFACeremony(stream *terminal.WSStream, createAuthenticateChallenge mfa.C
 
 	return &mfa.Ceremony{
 		CreateAuthenticateChallenge: createAuthenticateChallenge,
-		MFACeremonyConstructor: func(ctx context.Context) (mfa.SSOMFACeremony, error) {
+		MFACeremonyConstructor: func(ctx context.Context) (mfa.MFACeremony, error) {
 
 			u, err := url.Parse(sso.WebMFARedirect)
 			if err != nil {
