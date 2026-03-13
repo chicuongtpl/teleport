@@ -77,6 +77,7 @@ func (p *mfaPrompt) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 	promptSSO := chal.SSOChallenge != nil && p.cfg.MFACeremony != nil
 	promptBrowser := chal.BrowserMFAChallenge != nil
 
+	// TODO(danielashare): Implement Browser MFA for connect
 	if promptBrowser && !promptOTP && !promptWebauthn && !promptSSO {
 		return nil, trace.AccessDenied(
 			"Browser MFA was the only challenge returned and is not supported in Connect yet",
