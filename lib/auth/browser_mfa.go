@@ -89,6 +89,17 @@ func (a *Server) VerifyBrowserMFASession(ctx context.Context, username, sessionI
 		return nil, trace.NotFound("%s", notFoundErrMsg)
 	}
 
+	// Verify this is a Browser MFA session and not an SSO MFA session.
+	if mfaSess.TSHRedirectURL == "" && mfaSess.ConnectorID != constants.BrowserMFA {
+		a.logger.WarnContext(ctx,
+			"The Browser MFA flow was used to access a SSO MFA session.",
+			"request_id", mfaSess.RequestID,
+			"connector_id", mfaSess.ConnectorID,
+			"username", username,
+		)
+		return nil, trace.NotFound("%s", notFoundErrMsg)
+	}
+
 	// Check if the MFA session matches the user's Browser MFA settings.
 	devs, err := a.Services.GetMFADevices(ctx, username, false /* withSecrets */)
 	if err != nil {
