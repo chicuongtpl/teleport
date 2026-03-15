@@ -86,9 +86,12 @@ func (tc *TeleportClient) addMFADevice(ctx context.Context, resp *proto.MFARegis
 	_, err = rootClient.AddMFADeviceSync(ctx, &proto.AddMFADeviceSyncRequest{
 		NewDeviceName:  config.Name,
 		NewMFAResponse: resp,
-		// DeviceUsage:    config.ProtoUsage,
-		// TODO: CHANGE BEFORE REVIEW
-		DeviceUsage: proto.DeviceUsage_DEVICE_USAGE_MFA,
+		DeviceUsage: func() proto.DeviceUsage {
+			if config.AllowPasswordless {
+				return proto.DeviceUsage_DEVICE_USAGE_PASSWORDLESS
+			}
+			return proto.DeviceUsage_DEVICE_USAGE_MFA
+		}(),
 	})
 	return trace.Wrap(err)
 }
@@ -100,6 +103,9 @@ type WebauthnLoginFunc = libmfa.WebauthnLoginFunc
 // WebauthnRegisterFunc is a function that performs WebAuthn registration.
 // Mimics the signature of [wancli.Register].
 type WebauthnRegisterFunc = libmfa.WebauthnRegisterFunc
+
+// TouchIDRegisterFunc is a function that performs Touch ID registration.
+type TouchIDRegisterFunc = libmfa.TouchIDRegisterFunc
 
 // NewMFAPrompt creates a new MFA prompt from client settings.
 func (tc *TeleportClient) NewMFAPrompt(opts ...mfa.PromptOpt) mfa.Prompt {
@@ -128,8 +134,14 @@ func (tc *TeleportClient) newPromptConfig(opts ...mfa.PromptOpt) *libmfa.PromptC
 	cfg.AuthenticatorAttachment = tc.AuthenticatorAttachment
 	if tc.WebauthnLogin != nil {
 		cfg.WebauthnLoginFunc = tc.WebauthnLogin
+		cfg.WebauthnSupported = true
+	}
+	if tc.WebauthnRegister != nil {
 		cfg.WebauthnRegisterFunc = tc.WebauthnRegister
 		cfg.WebauthnSupported = true
+	}
+	if tc.TouchIDRegister != nil {
+		cfg.TouchIDRegisterFunc = tc.TouchIDRegister
 	}
 
 	return cfg
@@ -165,6 +177,14 @@ func (tc *TeleportClient) AddMFA(ctx context.Context, rdc mfa.RegisterDeviceConf
 		}
 		rdc.AuthSecondFactor = pingResp.Auth.SecondFactor
 	}
-	added, err := tc.NewMFACeremony().Register(ctx, rdc)
+	ceremony := &mfa.Ceremony{
+		CreateAuthenticateChallenge: tc.createAuthenticateChallenge,
+		PromptConstructor:           tc.NewMFAPrompt,
+		SSOMFACeremonyConstructor:   tc.NewSSOMFACeremony,
+		Ping:                        tc.Ping,
+		AddMFADevice:                tc.addMFADevice,
+		CreateRegisterChallenge:     tc.createRegisterChallenge,
+	}
+	added, err := ceremony.Register(ctx, rdc)
 	return added, trace.Wrap(err)
 }

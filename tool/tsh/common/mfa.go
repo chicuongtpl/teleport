@@ -194,12 +194,12 @@ func newMFAAddCommand(parent *kingpin.CmdClause) *mfaAddCommand {
 }
 
 func (c *mfaAddCommand) run(cf *CLIConf) error {
-	// c.setWebauthnRegisterFunc(cf.WebauthnRegister)
 	tc, err := makeClient(cf)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	ctx := cf.Context
+	out := cf.Stdout()
 
 	config := mfa.RegisterDeviceConfig{
 		Confirmed:            true,
@@ -220,17 +220,15 @@ func (c *mfaAddCommand) run(cf *CLIConf) error {
 		config.AuthSecondFactor = pingResp.Auth.SecondFactor
 	}
 
-	_, err = tc.NewMFACeremony().Register(ctx, config)
-	return trace.Wrap(err)
+	added, err := tc.AddMFA(ctx, config)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	if added {
+		fmt.Fprintf(out, "MFA device %q added.\n", config.Name)
+	}
+	return nil
 }
-
-// func (a *mfaAdder) setWebauthnRegisterFunc(reg WebauthnRegisterFunc) {
-// 	if reg != nil {
-// 		a.webauthnRegister = reg
-// 	} else {
-// 		a.webauthnRegister = wancli.Register
-// 	}
-// }
 
 type mfaRemoveCommand struct {
 	*kingpin.CmdClause
