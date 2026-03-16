@@ -1,6 +1,6 @@
-/*
+/**
  * Teleport
- * Copyright (C) 2023  Gravitational, Inc.
+ * Copyright (C) 2026 Gravitational, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -16,23 +16,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import CardError, {
-  AccessDenied,
-  Failed,
-  LoginFailed,
-  LogoutFailed,
-  NotFound,
-  Offline,
-  BadRequest,
-} from './CardError';
+import { BrowserMFAAccessDenied, BrowserMFAProcessing } from './BrowserMFA';
 
-export default CardError;
-export {
-  Failed,
-  LoginFailed,
-  AccessDenied,
-  NotFound,
-  Offline,
-  LogoutFailed,
-  BadRequest,
+export default {
+  title: 'Teleport/BrowserMFA',
 };
+
+export function Processing() {
+  return <BrowserMFAProcessing />;
+}
+
+export function AccessDenied() {
+  return <BrowserMFAAccessDenied statusText="MFA validation failed" />;
+}
+
+export function AccessDeniedWithLongMessage() {
+  return (
+    <BrowserMFAAccessDenied statusText="Your browser could not complete this authentication request. Please retry and ensure your security key or passkey is available." />
+  );
+}
