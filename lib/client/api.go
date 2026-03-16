@@ -187,12 +187,6 @@ func (p *DynamicForwardedPort) ToString() string {
 // remote host key or certificate validity
 type HostKeyCallback func(host string, ip net.Addr, key ssh.PublicKey) error
 
-// MFAAdderFunc is called by SSH client when it needs to add an MFA device.
-// Returns true if the MFA device was successfully added, and false if there
-// was no error, but the device was not added (for example, the user refused to
-// register it).
-type MFAAdderFunc func(ctx context.Context, tc *TeleportClient) (bool, error)
-
 // Config is a client config
 type Config struct {
 	// Username is the Teleport account username (for logging into Teleport proxies)
@@ -545,6 +539,8 @@ type Config struct {
 	// ProxyTemplates describe rules for parsing out proxy out of full hostnames.
 	ProxyTemplates ProxyTemplates
 
+	// RegisterMFADeviceIfRequired allows to offer the user registering an MFA
+	// device if they don't have one while connecting to a node with SSH.
 	RegisterMFADeviceIfRequired bool
 }
 
@@ -2206,13 +2202,8 @@ func (tc *TeleportClient) connectToNodeWithMFA(ctx context.Context, clt *Cluster
 		return nil, trace.Wrap(services.ErrSessionMFANotRequired)
 	}
 
-	// var cfg *ssh.ClientConfig
-	// err := tc.retryWithAddingMFA(ctx, func() error {
-	// 	var err error
 	// per-session mfa is required, perform the mfa ceremony
 	cfg, err := clt.SessionSSHConfig(ctx, user, nodeDetails)
-	// 	return trace.Wrap(err)
-	// })
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -2954,7 +2945,6 @@ func commandLimit(ctx context.Context, getter roleGetter, mfaRequired bool) int 
 type execResult struct {
 	hostname   string
 	exitStatus int
-	err        error
 }
 
 // sharedWriter is an [io.Writer] implementation that protects
@@ -3068,7 +3058,6 @@ func (tc *TeleportClient) runCommandOnNodes(ctx context.Context, clt *ClusterCli
 				resultsCh <- execResult{
 					hostname:   displayName,
 					exitStatus: 1,
-					err:        err,
 				}
 				return nil
 			}

@@ -176,8 +176,6 @@ type mfaAddCommand struct {
 	// Note that Touch ID registrations are always passwordless-capable,
 	// regardless of other settings.
 	allowPasswordless, allowPasswordlessSet bool
-
-	// webauthnRegister client.WebauthnRegisterFunc
 }
 
 func newMFAAddCommand(parent *kingpin.CmdClause) *mfaAddCommand {
@@ -204,9 +202,9 @@ func (c *mfaAddCommand) run(cf *CLIConf) error {
 	out := cf.Stdout()
 
 	config := mfa.RegistrationCeremonyConfig{
-		Confirmed: true,
-		DeviceName:      c.devName,
-		DeviceType:      mfa.MFADeviceType(c.devType), // type correctness guaranteed by EnumVar
+		Confirmed:  true,
+		DeviceName: c.devName,
+		DeviceType: mfa.MFADeviceType(c.devType), // type correctness guaranteed by EnumVar
 	}
 
 	if c.allowPasswordlessSet {

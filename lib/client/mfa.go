@@ -20,7 +20,6 @@ package client
 
 import (
 	"context"
-	"io"
 
 	"github.com/gravitational/trace"
 
@@ -40,11 +39,15 @@ func (tc *TeleportClient) NewMFACeremony() *mfa.Ceremony {
 	}
 
 	if tc.RegisterMFADeviceIfRequired {
-		c.AddMFADevice = tc.addMFADevice
-		c.CreateRegisterChallenge = tc.createRegisterChallenge
+		tc.allowRegisteringMFADevicesForCeremony(c)
 	}
 
 	return c
+}
+
+func (tc *TeleportClient) allowRegisteringMFADevicesForCeremony(c *mfa.Ceremony) {
+	c.AddMFADevice = tc.addMFADevice
+	c.CreateRegisterChallenge = tc.createRegisterChallenge
 }
 
 // createAuthenticateChallenge creates and returns MFA challenges for a users registered MFA devices.
@@ -73,6 +76,7 @@ func (tc *TeleportClient) createRegisterChallenge(ctx context.Context, req *prot
 	return rootClient.CreateRegisterChallenge(ctx, req)
 }
 
+// addMFADevice adds an MFA device to Teleport backend.
 func (tc *TeleportClient) addMFADevice(ctx context.Context, resp *proto.MFARegisterResponse, config mfa.RegistrationCeremonyConfig) error {
 	clusterClient, err := tc.ConnectToCluster(ctx)
 	if err != nil {
@@ -113,7 +117,7 @@ func (tc *TeleportClient) NewMFAPrompt(opts ...mfa.PromptOpt) mfa.Prompt {
 		PreferSSO:           tc.PreferSSO,
 		AllowStdinHijack:    tc.AllowStdinHijack,
 		StdinFunc:           tc.StdinFunc,
-		StdoutFunc:          func() io.Writer { return tc.Stdout },
+		Stdout:              tc.Stdout,
 		CeremonyConstructor: tc.NewMFACeremony,
 	})
 
@@ -162,14 +166,9 @@ func (tc *TeleportClient) NewSSOMFACeremony(ctx context.Context) (mfa.SSOMFACere
 }
 
 func (tc *TeleportClient) AddMFA(ctx context.Context, rdc mfa.RegistrationCeremonyConfig) (bool, error) {
-	ceremony := &mfa.Ceremony{
-		CreateAuthenticateChallenge: tc.createAuthenticateChallenge,
-		PromptConstructor:           tc.NewMFAPrompt,
-		SSOMFACeremonyConstructor:   tc.NewSSOMFACeremony,
-		Ping:                        tc.Ping,
-		AddMFADevice:                tc.addMFADevice,
-		CreateRegisterChallenge:     tc.createRegisterChallenge,
-	}
-	added, err := ceremony.Register(ctx, rdc)
+	c := tc.NewMFACeremony()
+	// Unconditionally allow registering MFA devices.
+	tc.allowRegisteringMFADevicesForCeremony(c)
+	added, err := c.Register(ctx, rdc)
 	return added, trace.Wrap(err)
 }

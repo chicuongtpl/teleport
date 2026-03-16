@@ -102,7 +102,7 @@ type CLIPromptConfig struct {
 	// StdinFunc allows tests to override prompt.Stdin().
 	// If nil prompt.Stdin() is used.
 	StdinFunc           func() prompt.StdinReader
-	StdoutFunc          func() io.Writer
+	Stdout              io.Writer
 	RootClient          ClusterClient
 	CeremonyConstructor func() *mfa.Ceremony
 }
@@ -131,10 +131,10 @@ func (c *CLIPrompt) stdin() prompt.StdinReader {
 }
 
 func (c *CLIPrompt) stdout() io.Writer {
-	if c.cfg.StdoutFunc == nil {
+	if c.cfg.Stdout == nil {
 		return os.Stdout
 	}
-	return c.cfg.StdoutFunc()
+	return c.cfg.Stdout
 }
 
 func (c *CLIPrompt) writer() io.Writer {
@@ -420,6 +420,7 @@ func (c *CLIPrompt) promptSSO(ctx context.Context, chal *proto.MFAAuthenticateCh
 	return resp, trace.Wrap(err)
 }
 
+// AskRegister prompts user for device details and registers a new MFA device.
 func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegistrationPromptConfig) (*mfa.RegistrationResult, error) {
 	if !config.Confirmed {
 		yes, err := prompt.Confirmation(ctx, c.stdout(), c.stdin(),
@@ -496,8 +497,6 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegistrationProm
 	// for the *registered* or *new* device.
 	// We do it here, preemptively, because it's the simpler solution (instead
 	// of finding out whether it is a Windows prompt or not).
-	//
-	// TODO(Joerger): this should live in lib/client/mfa/cli.go using the prompt device prefix.
 	const registeredMsg = "Using platform authentication for *registered* device, follow the OS dialogs"
 	const newMsg = "Using platform authentication for *new* device, follow the OS dialogs"
 	webauthnwin.SetPromptPlatformMessage(registeredMsg)
@@ -528,7 +527,11 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegistrationProm
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return &mfa.RegistrationResult{Config: config.RegistrationCeremonyConfig, Response: resp, Callbacks: callback}, nil
+	return &mfa.RegistrationResult{
+		Config:    config.RegistrationCeremonyConfig,
+		Response:  resp,
+		Callbacks: callback,
+	}, nil
 }
 
 func deviceTypesFromSecondFactor(sf constants.SecondFactorType) []mfa.MFADeviceType {
@@ -552,7 +555,9 @@ func (n noopRegisterCallback) Confirm() error {
 	return nil
 }
 
-func (c *CLIPrompt) promptRegisterChallenge(ctx context.Context, proxyAddr string, devType mfa.MFADeviceType, rc *proto.MFARegisterChallenge) (*proto.MFARegisterResponse, mfa.RegistrationCallbacks, error) {
+func (c *CLIPrompt) promptRegisterChallenge(
+	ctx context.Context, proxyAddr string, devType mfa.MFADeviceType, rc *proto.MFARegisterChallenge,
+) (*proto.MFARegisterResponse, mfa.RegistrationCallbacks, error) {
 	switch rc.Request.(type) {
 	case *proto.MFARegisterChallenge_TOTP:
 		resp, err := c.promptTOTPRegisterChallenge(ctx, rc.GetTOTP())

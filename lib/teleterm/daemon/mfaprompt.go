@@ -142,10 +142,6 @@ func (p *mfaPrompt) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 	return libmfa.HandleMFAPromptGoroutines(ctx, spawnGoroutines)
 }
 
-func (p *mfaPrompt) AddMFA(ctx context.Context, spec mfa.RegistrationCeremonyConfig) (bool, error) {
-	return false, nil
-}
-
 func (f *mfaPrompt) AskRegister(ctx context.Context, config mfa.RegistrationPromptConfig) (*mfa.RegistrationResult, error) {
 	return nil, trace.NotImplemented("not supported")
 }
