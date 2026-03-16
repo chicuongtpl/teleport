@@ -2806,6 +2806,7 @@ func TestSSHAddingMFA(t *testing.T) {
 			stdout := output{}
 			args := []string{
 				"ssh",
+				"--debug",
 				"--insecure",
 			}
 			args = append(args, tc.extraArgs...)
