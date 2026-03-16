@@ -215,7 +215,7 @@ func (c *Ceremony) Register(ctx context.Context, config RegistrationCeremonyConf
 	}
 
 	// Add the registered device to the backend.
-	if err = c.AddMFADevice(ctx, result.Response, result.Config); err != nil {
+	if err = c.AddMFADevice(ctx, result.Response, result.Config.RegistrationCeremonyConfig); err != nil {
 		result.Callbacks.Rollback()
 		return false, trace.Wrap(err)
 	}
@@ -223,6 +223,7 @@ func (c *Ceremony) Register(ctx context.Context, config RegistrationCeremonyConf
 		return false, trace.Wrap(err)
 	}
 
+	regPrompt.NotifyRegistrationSuccess(ctx, result.Config)
 	return true, nil
 }
 

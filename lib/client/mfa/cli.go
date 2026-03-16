@@ -528,10 +528,17 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config mfa.RegistrationProm
 		return nil, trace.Wrap(err)
 	}
 	return &mfa.RegistrationResult{
-		Config:    config.RegistrationCeremonyConfig,
+		Config:    config,
 		Response:  resp,
 		Callbacks: callback,
 	}, nil
+}
+
+// NotifyRegistrationSuccess notifies the user that the device registration was
+// successful.
+func (c *CLIPrompt) NotifyRegistrationSuccess(_ context.Context, config mfa.RegistrationPromptConfig) error {
+	fmt.Fprintf(c.stdout(), "MFA device %q added.\n\n", config.DeviceName)
+	return nil
 }
 
 func deviceTypesFromSecondFactor(sf constants.SecondFactorType) []mfa.MFADeviceType {

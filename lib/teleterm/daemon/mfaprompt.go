@@ -142,8 +142,15 @@ func (p *mfaPrompt) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 	return libmfa.HandleMFAPromptGoroutines(ctx, spawnGoroutines)
 }
 
+// AskRegister prompts user for device details and registers a new MFA device.
 func (f *mfaPrompt) AskRegister(ctx context.Context, config mfa.RegistrationPromptConfig) (*mfa.RegistrationResult, error) {
 	return nil, trace.NotImplemented("not supported")
+}
+
+// NotifyRegistrationSuccess notifies the user that the device registration was
+// successful.
+func (f *mfaPrompt) NotifyRegistrationSuccess(_ context.Context, _ mfa.RegistrationPromptConfig) error {
+	return trace.NotImplemented("not supported")
 }
 
 func (p *mfaPrompt) promptMFA(ctx context.Context, req *api.PromptMFARequest) (*proto.MFAAuthenticateResponse, error) {
