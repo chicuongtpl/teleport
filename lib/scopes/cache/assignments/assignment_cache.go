@@ -73,7 +73,7 @@ func NewAssignmentCache(cfg AssignmentCacheConfig) *AssignmentCache {
 				return assignment.GetScope()
 			},
 			Key: func(assignment *scopedaccessv1.ScopedRoleAssignment) string {
-				return assignment.GetMetadata().GetName()
+				return assignmentKey(assignment.GetMetadata().GetName(), assignment.GetSubKind())
 			},
 			Clone: proto.CloneOf[*scopedaccessv1.ScopedRoleAssignment],
 		}),
@@ -86,8 +86,11 @@ func (c *AssignmentCache) GetScopedRoleAssignment(ctx context.Context, req *scop
 	if req.GetName() == "" {
 		return nil, trace.BadParameter("missing scoped role assignment name in get request")
 	}
+	if req.GetSubKind() == "" {
+		return nil, trace.BadParameter("missing scoped role assignment sub kind in get request")
+	}
 
-	assignment, ok := c.cache.Get(req.GetName())
+	assignment, ok := c.cache.Get(assignmentKey(req.GetName(), req.GetSubKind()))
 	if !ok {
 		return nil, trace.NotFound("scoped role assignment %q not found", req.GetName())
 	}
@@ -180,7 +183,7 @@ Outer:
 			if len(out) == pageSize {
 				nextCursor = cache.Cursor[string]{
 					Scope: scope.Scope(),
-					Key:   assignment.GetMetadata().GetName(),
+					Key:   assignmentKey(assignment.GetMetadata().GetName(), assignment.GetSubKind()),
 				}
 				break Outer
 			}
@@ -212,7 +215,11 @@ func (c *AssignmentCache) Put(assignment *scopedaccessv1.ScopedRoleAssignment) e
 	return nil
 }
 
-// Del removes an assignment from the cache by name.
-func (c *AssignmentCache) Delete(name string) {
-	c.cache.Del(name)
+// Delete removes an assignment from the cache by name.
+func (c *AssignmentCache) Delete(name, subKind string) {
+	c.cache.Del(assignmentKey(name, subKind))
+}
+
+func assignmentKey(name, subKind string) string {
+	return name + "/" + subKind
 }

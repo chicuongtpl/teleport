@@ -1113,12 +1113,18 @@ type scopedRoleAssignmentParser struct {
 func (p *scopedRoleAssignmentParser) parse(event backend.Event) (types.Resource, error) {
 	switch event.Type {
 	case types.OpDelete:
-		name := strings.TrimPrefix(event.Item.Key.TrimPrefix(scopedRoleAssignmentWatchPrefix()).String(), backend.SeparatorString)
-		if name == "" || strings.Contains(name, "/") {
+		components := event.Item.Key.TrimPrefix(scopedRoleAssignmentWatchPrefix()).Components()
+		if len(components) != 2 {
+			return nil, trace.NotFound("failed parsing %v", event.Item.Key.String())
+		}
+		name := components[0]
+		subKind := components[1]
+		if name == "" || subKind == "" {
 			return nil, trace.NotFound("failed parsing %v", event.Item.Key.String())
 		}
 		return &types.ResourceHeader{
-			Kind: scopedaccess.KindScopedRoleAssignment,
+			Kind:    scopedaccess.KindScopedRoleAssignment,
+			SubKind: subKind,
 			Metadata: types.Metadata{
 				Name: name,
 			},
