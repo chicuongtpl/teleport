@@ -1080,6 +1080,11 @@ func genInstancesLogStr[T any](instances []T, getID func(T) string) string {
 }
 
 func (s *Server) handleEC2Instances(instances *server.EC2Instances) error {
+	if instances.InstallerParams == nil {
+		// This should never happen.
+		return trace.BadParameter("missing installer parameters for ec2 instances")
+	}
+
 	serverInfos, err := instances.ServerInfos()
 	if err != nil {
 		return trace.Wrap(err)
@@ -1092,7 +1097,7 @@ func (s *Server) handleEC2Instances(instances *server.EC2Instances) error {
 	//
 	// EICE Nodes must never be filtered, so that we can extend their expiration and sync labels.
 	totalInstancesFound := len(instances.Instances)
-	if !instances.Rotation && instances.EnrollMode != types.InstallParamEnrollMode_INSTALL_PARAM_ENROLL_MODE_EICE {
+	if !instances.Rotation && instances.InstallerParams.EnrollMode != types.InstallParamEnrollMode_INSTALL_PARAM_ENROLL_MODE_EICE {
 		if err := s.filterExistingEC2Nodes(instances); err != nil {
 			return trace.Wrap(err)
 		}
@@ -1108,7 +1113,7 @@ func (s *Server) handleEC2Instances(instances *server.EC2Instances) error {
 		return trace.NotFound("all fetched nodes already enrolled")
 	}
 
-	switch instances.EnrollMode {
+	switch instances.InstallerParams.EnrollMode {
 	case types.InstallParamEnrollMode_INSTALL_PARAM_ENROLL_MODE_EICE:
 		s.heartbeatEICEInstance(instances)
 
@@ -1117,7 +1122,7 @@ func (s *Server) handleEC2Instances(instances *server.EC2Instances) error {
 			return trace.Wrap(err)
 		}
 	default:
-		return trace.BadParameter("invalid enroll mode for ec2 instance: %q", instances.EnrollMode.String())
+		return trace.BadParameter("invalid enroll mode for ec2 instance: %q", instances.InstallerParams.EnrollMode.String())
 	}
 
 	if err := s.emitUsageEvents(instances.MakeEvents()); err != nil {
@@ -1214,6 +1219,10 @@ func (s *Server) handleEC2RemoteInstallation(instances *server.EC2Instances) err
 		awsconfig.WithAssumeRole(instances.AssumeRoleARN, instances.ExternalID),
 	)
 	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	if err := server.CheckInstallParamsManagedUpdates(s.ctx, instances.InstallerParams, s.AccessPoint); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -1388,6 +1397,10 @@ func (s *Server) enrollAzureVirtualMachines(log *slog.Logger, instances *server.
 
 	runClient, err := azureClients.GetRunCommandClient(s.ctx, instances.SubscriptionID)
 	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	if err := server.CheckInstallParamsManagedUpdates(s.ctx, instances.InstallerParams, s.AccessPoint); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
@@ -1667,6 +1680,10 @@ func (s *Server) handleGCPInstances(instances *server.GCPInstances) error {
 	}
 	if len(instances.Instances) == 0 {
 		return trace.Wrap(errNoInstances)
+	}
+
+	if err := server.CheckInstallParamsManagedUpdates(s.ctx, instances.InstallerParams, s.AccessPoint); err != nil {
+		return trace.Wrap(err)
 	}
 
 	s.Log.DebugContext(s.ctx, "Running Teleport installation on virtual machines", "project_id", instances.ProjectID, "vms", genGCPInstancesLogStr(instances.Instances))
