@@ -142,12 +142,12 @@ func (p *mfaPrompt) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 	return libmfa.HandleMFAPromptGoroutines(ctx, spawnGoroutines)
 }
 
-func (p *mfaPrompt) AddMFA(ctx context.Context, spec mfa.RegisterDeviceConfig) (bool, error) {
+func (p *mfaPrompt) AddMFA(ctx context.Context, spec mfa.RegistrationCeremonyConfig) (bool, error) {
 	return false, nil
 }
 
-func (f *mfaPrompt) AskRegister(ctx context.Context, config *mfa.RegisterDeviceConfig) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
-	return nil, nil, trace.NotImplemented("not supported")
+func (f *mfaPrompt) AskRegister(ctx context.Context, config mfa.RegistrationPromptConfig) (*mfa.RegistrationResult, error) {
+	return nil, trace.NotImplemented("not supported")
 }
 
 func (p *mfaPrompt) promptMFA(ctx context.Context, req *api.PromptMFARequest) (*proto.MFAAuthenticateResponse, error) {

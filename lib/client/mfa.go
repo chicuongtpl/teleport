@@ -73,7 +73,7 @@ func (tc *TeleportClient) createRegisterChallenge(ctx context.Context, req *prot
 	return rootClient.CreateRegisterChallenge(ctx, req)
 }
 
-func (tc *TeleportClient) addMFADevice(ctx context.Context, resp *proto.MFARegisterResponse, config mfa.RegisterDeviceConfig) error {
+func (tc *TeleportClient) addMFADevice(ctx context.Context, resp *proto.MFARegisterResponse, config mfa.RegistrationCeremonyConfig) error {
 	clusterClient, err := tc.ConnectToCluster(ctx)
 	if err != nil {
 		return trace.Wrap(err)
@@ -84,14 +84,9 @@ func (tc *TeleportClient) addMFADevice(ctx context.Context, resp *proto.MFARegis
 	}
 
 	_, err = rootClient.AddMFADeviceSync(ctx, &proto.AddMFADeviceSyncRequest{
-		NewDeviceName:  config.Name,
+		NewDeviceName:  config.DeviceName,
 		NewMFAResponse: resp,
-		DeviceUsage: func() proto.DeviceUsage {
-			if config.AllowPasswordless {
-				return proto.DeviceUsage_DEVICE_USAGE_PASSWORDLESS
-			}
-			return proto.DeviceUsage_DEVICE_USAGE_MFA
-		}(),
+		DeviceUsage:    config.DeviceUsage,
 	})
 	return trace.Wrap(err)
 }
@@ -166,17 +161,7 @@ func (tc *TeleportClient) NewSSOMFACeremony(ctx context.Context) (mfa.SSOMFACere
 	return sso.NewCLIMFACeremony(rd), nil
 }
 
-func (tc *TeleportClient) AddMFA(ctx context.Context, rdc mfa.RegisterDeviceConfig) (bool, error) {
-	if rdc.Type == "" {
-		// If we are prompting the user for the device type, then take a glimpse at
-		// server-side settings and adjust the options accordingly.
-		// This is undesirable to do during flag setup, but we can do it here.
-		pingResp, err := tc.Ping(ctx)
-		if err != nil {
-			return false, trace.Wrap(err)
-		}
-		rdc.AuthSecondFactor = pingResp.Auth.SecondFactor
-	}
+func (tc *TeleportClient) AddMFA(ctx context.Context, rdc mfa.RegistrationCeremonyConfig) (bool, error) {
 	ceremony := &mfa.Ceremony{
 		CreateAuthenticateChallenge: tc.createAuthenticateChallenge,
 		PromptConstructor:           tc.NewMFAPrompt,

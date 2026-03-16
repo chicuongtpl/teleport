@@ -18,7 +18,6 @@ package mfa
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"slices"
 
@@ -33,15 +32,22 @@ import (
 type Ceremony struct {
 	// CreateAuthenticateChallenge creates an authentication challenge.
 	CreateAuthenticateChallenge CreateAuthenticateChallengeFunc
-	CreateRegisterChallenge     CreateRegisterChallengeFunc
-	AddMFADevice                AddMFADeviceFunc
-	Ping                        PingFunc
+	// CreateRegisterChallenge creates a device registration challenge. If set to
+	// nil, the ceremony is unable to register MFA devices.
+	CreateRegisterChallenge CreateRegisterChallengeFunc
+	// AddMFADevice adds a device to Teleport backend after it has been
+	// registered on the client side. If set to nil, the ceremony is unable to
+	// register MFA devices.
+	AddMFADevice AddMFADeviceFunc
+	// Ping fetches a [webclient.PingResponse] from the server.
+	Ping PingFunc
 	// PromptConstructor creates a prompt to prompt the user to solve an authentication challenge.
 	PromptConstructor PromptConstructor
 	// SSOMFACeremonyConstructor is an optional SSO MFA ceremony constructor. If provided,
 	// the MFA ceremony will also attempt to retrieve an SSO MFA challenge.
 	SSOMFACeremonyConstructor SSOMFACeremonyConstructor
 
+	// isRegistering is set to indicate that the ceremony is currently registering an MFA device and therefore
 	isRegistering bool
 }
 
@@ -59,15 +65,17 @@ type SSOMFACeremonyConstructor func(ctx context.Context) (SSOMFACeremony, error)
 // CreateAuthenticateChallengeFunc is a function that creates an authentication challenge.
 type CreateAuthenticateChallengeFunc func(ctx context.Context, req *proto.CreateAuthenticateChallengeRequest) (*proto.MFAAuthenticateChallenge, error)
 type CreateRegisterChallengeFunc func(ctx context.Context, req *proto.CreateRegisterChallengeRequest) (*proto.MFARegisterChallenge, error)
-type AddMFADeviceFunc func(ctx context.Context, req *proto.MFARegisterResponse, config RegisterDeviceConfig) error
+type AddMFADeviceFunc func(ctx context.Context, req *proto.MFARegisterResponse, config RegistrationCeremonyConfig) error
 type PingFunc func(ctx context.Context) (*webclient.PingResponse, error)
 
 // Run the MFA ceremony.
 //
 // req may be nil if ceremony.CreateAuthenticateChallenge does not require it, e.g. in
 // the moderated session mfa ceremony which uses a custom stream rpc to create challenges.
+//
+// If the ceremony and was configured to support it, this method also offers
+// the user to register their first MFA device.
 func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallengeRequest, promptOpts ...PromptOpt) (*proto.MFAAuthenticateResponse, error) {
-	fmt.Printf("========= Starting ceremony: %v\n", *c)
 	if c.CreateAuthenticateChallenge == nil {
 		return nil, trace.BadParameter("mfa ceremony must have CreateAuthenticateChallenge set in order to begin")
 	}
@@ -118,15 +126,9 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 	}
 
 	// If the user has no device registered, prompt them to register and then re-generate the challenge.
-	println("========= challenge creator", c.CreateRegisterChallenge)
 	noRegisteredDevices := chal.WebauthnChallenge == nil && chal.SSOChallenge == nil && chal.TOTP == nil
 	if noRegisteredDevices && c.CreateRegisterChallenge != nil && c.AddMFADevice != nil && !c.isRegistering {
-		println("Attempting to register")
-		// // Clone this ceremony and prevent the clone from recursively attempting to
-		// // register a device.
-		// c2 := c.Clone()
-		// c2.CreateRegisterChallenge = nil
-		added, err := c.Register(ctx, RegisterDeviceConfig{})
+		added, err := c.Register(ctx, RegistrationCeremonyConfig{})
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -150,18 +152,48 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 	return resp, trace.Wrap(err)
 }
 
-func (c *Ceremony) Register(ctx context.Context, config RegisterDeviceConfig) (bool, error) {
+// RegistrationCeremonyConfig provides configuration for the
+// [Ceremony.Register] function.
+type RegistrationCeremonyConfig struct {
+	// Confirmed determines whether the user has expressed an explicit request
+	// for registering an MFA device. Otherwise, the user will be asked for
+	// confirmation before performing the registration dialog.
+	Confirmed bool
+	// DeviceName is the name of the device to be added. If empty, the user will
+	// be prompted to enter it.
+	DeviceName string
+	// DeviceType is the type of the device to be added. If empty, the user will
+	// be prompted to enter it.
+	DeviceType MFADeviceType
+	// DeviceUsage is the intended usage for the MFA device to be added. If set
+	// to [proto.DeviceUsage_DEVICE_USAGE_UNSPECIFIED], the user may be offered
+	// registering a passwordless device.
+	DeviceUsage proto.DeviceUsage
+}
+
+// Register interacts with user to register an MFA device on the client side
+// and adds the device to Teleport backend. Returns true if the device was
+// added, and false if it was not (for example, the user refused to register
+// it).
+func (c *Ceremony) Register(ctx context.Context, config RegistrationCeremonyConfig) (bool, error) {
+	// Normally, registration can cause the MFA ceremony to be executed using
+	// Run(). However, Run() can also be executed standalone and attempt to
+	// register user's first MFA device. In such case, we prevent recursion here
+	// and just report that no device has been registered.
 	if c.isRegistering {
 		return false, nil
 	}
-
 	c.isRegistering = true
 	defer func() {
 		c.isRegistering = false
 	}()
+
 	regPrompt := c.PromptConstructor(func(cfg *PromptConfig) { cfg.MFACeremony = c })
 
-	if config.Type == "" {
+	promptConfig := RegistrationPromptConfig{
+		RegistrationCeremonyConfig: config,
+	}
+	if config.DeviceType == "" {
 		// If we are prompting the user for the device type, then take a glimpse at
 		// server-side settings and adjust the options accordingly.
 		// This is undesirable to do during flag setup, but we can do it here.
@@ -169,22 +201,25 @@ func (c *Ceremony) Register(ctx context.Context, config RegisterDeviceConfig) (b
 		if err != nil {
 			return false, trace.Wrap(err)
 		}
-		config.AuthSecondFactor = pingResp.Auth.SecondFactor
+		promptConfig.AuthSecondFactor = pingResp.Auth.SecondFactor
 	}
 
-	resp, callback, err := regPrompt.AskRegister(ctx, &config)
+	// Attempt the actual interactive registration.
+	result, err := regPrompt.AskRegister(ctx, promptConfig)
 	if err != nil {
 		return false, trace.Wrap(err)
 	}
-	if resp == nil || callback == nil {
-		return false, err
+	if result == nil {
+		// No device has been registered.
+		return false, nil
 	}
 
-	if err = c.AddMFADevice(ctx, resp, config); err != nil {
-		callback.Rollback()
+	// Add the registered device to the backend.
+	if err = c.AddMFADevice(ctx, result.Response, result.Config); err != nil {
+		result.Callbacks.Rollback()
 		return false, trace.Wrap(err)
 	}
-	if err := callback.Confirm(); err != nil {
+	if err := result.Callbacks.Confirm(); err != nil {
 		return false, trace.Wrap(err)
 	}
 

@@ -56,7 +56,7 @@ type WebauthnRegisterFunc func(
 type TouchIDRegisterFunc func(
 	origin string,
 	cc *wantypes.CredentialCreation,
-) (*proto.MFARegisterResponse, mfa.RegisterCallback, error)
+) (*proto.MFARegisterResponse, mfa.RegistrationCallbacks, error)
 
 // PromptConfig contains common mfa prompt config options shared by
 // different implementations of [mfa.Prompt].

@@ -35,6 +35,7 @@ import (
 	mfav1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/mfa/v1"
 	"github.com/gravitational/teleport/api/mfa"
 	"github.com/gravitational/teleport/api/types"
+	apiutils "github.com/gravitational/teleport/api/utils"
 	"github.com/gravitational/teleport/lib/asciitable"
 	"github.com/gravitational/teleport/lib/auth/touchid"
 	wancli "github.com/gravitational/teleport/lib/auth/webauthncli"
@@ -42,6 +43,7 @@ import (
 	libmfa "github.com/gravitational/teleport/lib/client/mfa"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/utils"
+	"github.com/gravitational/teleport/lib/utils/slices"
 )
 
 type mfaCommands struct {
@@ -183,8 +185,8 @@ func newMFAAddCommand(parent *kingpin.CmdClause) *mfaAddCommand {
 		CmdClause: parent.Command("add", "Add a new MFA device."),
 	}
 	c.Flag("name", "Name of the new MFA device.").StringVar(&c.devName)
-	c.Flag("type", fmt.Sprintf("Type of the new MFA device (%s).", strings.Join(libmfa.DefaultDeviceTypes, ", "))).
-		EnumVar(&c.devType, libmfa.DefaultDeviceTypes...)
+	c.Flag("type", fmt.Sprintf("Type of the new MFA device (%s).", apiutils.JoinStrings(libmfa.DefaultDeviceTypes, ", "))).
+		EnumVar(&c.devType, slices.Map(libmfa.DefaultDeviceTypes, func(v mfa.MFADeviceType) string { return string(v) })...)
 	if wancli.IsFIDO2Available() {
 		c.Flag("allow-passwordless", "Allow passwordless logins.").
 			IsSetByUser(&c.allowPasswordlessSet).
@@ -201,23 +203,18 @@ func (c *mfaAddCommand) run(cf *CLIConf) error {
 	ctx := cf.Context
 	out := cf.Stdout()
 
-	config := mfa.RegisterDeviceConfig{
-		Confirmed:            true,
-		Name:                 c.devName,
-		Type:                 c.devType,
-		AllowPasswordless:    c.allowPasswordless,
-		AllowPasswordlessSet: c.allowPasswordlessSet,
+	config := mfa.RegistrationCeremonyConfig{
+		Confirmed: true,
+		DeviceName:      c.devName,
+		DeviceType:      mfa.MFADeviceType(c.devType), // type correctness guaranteed by EnumVar
 	}
 
-	if config.Type == "" {
-		// If we are prompting the user for the device type, then take a glimpse at
-		// server-side settings and adjust the options accordingly.
-		// This is undesirable to do during flag setup, but we can do it here.
-		pingResp, err := tc.Ping(ctx)
-		if err != nil {
-			return trace.Wrap(err)
+	if c.allowPasswordlessSet {
+		if c.allowPasswordless {
+			config.DeviceUsage = proto.DeviceUsage_DEVICE_USAGE_PASSWORDLESS
+		} else {
+			config.DeviceUsage = proto.DeviceUsage_DEVICE_USAGE_MFA
 		}
-		config.AuthSecondFactor = pingResp.Auth.SecondFactor
 	}
 
 	added, err := tc.AddMFA(ctx, config)
@@ -225,7 +222,7 @@ func (c *mfaAddCommand) run(cf *CLIConf) error {
 		return trace.Wrap(err)
 	}
 	if added {
-		fmt.Fprintf(out, "MFA device %q added.\n", config.Name)
+		fmt.Fprintf(out, "MFA device %q added.\n", config.DeviceName)
 	}
 	return nil
 }

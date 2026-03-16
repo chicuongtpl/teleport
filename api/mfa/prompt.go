@@ -27,33 +27,54 @@ import (
 	mfav1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/mfa/v1"
 )
 
-type RegisterDeviceConfig struct {
-	Confirmed bool
-	Name      string
-	Type      string
+// MFADeviceType is a type of MFA device for device registration purposes.
+type MFADeviceType string
 
-	// allowPasswordless and allowPasswordlessSet hold the state of the
-	// --(no-)allow-passwordless flag.
-	//
-	// allowPasswordless can only be set by users if wancli.IsFIDO2Available() is
-	// true.
-	// Note that Touch ID registrations are always passwordless-capable,
-	// regardless of other settings.
-	AllowPasswordless, AllowPasswordlessSet bool
+const (
+	TOTPDeviceType     MFADeviceType = "TOTP"
+	WebauthnDeviceType MFADeviceType = "WEBAUTHN"
+	TouchIDDeviceType  MFADeviceType = "TOUCHID"
+)
 
-	AuthSecondFactor constants.SecondFactorType
+// RegistrationCallbacks contains functions for confirming or rolling back
+// credentials that have been created by the MFA device.
+type RegistrationCallbacks interface {
+	// Rollback removes the newly created key from the MFA device.
+	Rollback() error
+	// Confirm persists the newly created key in the MFA device.
+	Confirm() error
 }
 
-type RegisterCallback interface {
-	Rollback() error
-	Confirm() error
+// RegistrationResult contains the result of a [Prompt.AskRegister] call.
+type RegistrationResult struct {
+	// Config is the registration ceremony config, potentially updated with user
+	// input (device name, type, and usage) if not provided upfront.
+	Config RegistrationCeremonyConfig
+	// Response is the registration challenge response from the MFA device.
+	Response *proto.MFARegisterResponse
+	// Callbacks contain functions that need to be called depending on the result
+	// of adding the MFA device to the Teleport backend. They may have no effect,
+	// depending if they are supported by the particular MFA technology.
+	Callbacks RegistrationCallbacks
+}
+
+// RegistrationPromptConfig provides configuration for the [Prompt.AskRegister]
+// function.
+type RegistrationPromptConfig struct {
+	RegistrationCeremonyConfig
+
+	// AuthSecondFactor is the Second Factor option as configured in the auth
+	// service's auth preferences.
+	AuthSecondFactor constants.SecondFactorType
 }
 
 // Prompt is an MFA prompt.
 type Prompt interface {
 	// Run prompts the user to complete an MFA authentication challenge.
 	Run(ctx context.Context, chal *proto.MFAAuthenticateChallenge) (*proto.MFAAuthenticateResponse, error)
-	AskRegister(ctx context.Context, config *RegisterDeviceConfig) (*proto.MFARegisterResponse, RegisterCallback, error)
+	// AskRegister prompts user for device details and registers a new MFA
+	// device.
+	AskRegister(ctx context.Context, config RegistrationPromptConfig) (*RegistrationResult, error)
 }
 
 // PromptFunc is a function wrapper that implements the Prompt interface.
@@ -64,8 +85,9 @@ func (f PromptFunc) Run(ctx context.Context, chal *proto.MFAAuthenticateChalleng
 	return f(ctx, chal)
 }
 
-func (f PromptFunc) AskRegister(ctx context.Context, config *RegisterDeviceConfig) (*proto.MFARegisterResponse, RegisterCallback, error) {
-	return nil, nil, trace.NotImplemented("not supported")
+// AskRegister prompts user for device details and registers a new MFA device.
+func (f PromptFunc) AskRegister(ctx context.Context, config RegistrationPromptConfig) (*RegistrationResult, error) {
+	return nil, trace.NotImplemented("not supported")
 }
 
 // PromptConstructor is a function that creates a new MFA prompt.
@@ -86,7 +108,9 @@ type PromptConfig struct {
 	Extensions *mfav1.ChallengeExtensions
 	// SSOMFACeremony is an SSO MFA ceremony.
 	SSOMFACeremony SSOMFACeremony
-	MFACeremony    *Ceremony
+	// MFACeremony is an MFA ceremony. Used when the prompt is used for
+	// registering a new MFA device.
+	MFACeremony *Ceremony
 }
 
 // DeviceDescriptor is a descriptor for a device, such as "registered".

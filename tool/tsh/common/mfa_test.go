@@ -113,7 +113,7 @@ func setMockMFARegister() CliOption {
 		cf.WebauthnRegister = func(ctx context.Context, origin string, cc *wantypes.CredentialCreation, _ wancli.RegisterPrompt) (*proto.MFARegisterResponse, error) {
 			return register(origin, cc)
 		}
-		cf.TouchIDRegister = func(origin string, cc *wantypes.CredentialCreation) (*proto.MFARegisterResponse, apimfa.RegisterCallback, error) {
+		cf.TouchIDRegister = func(origin string, cc *wantypes.CredentialCreation) (*proto.MFARegisterResponse, apimfa.RegistrationCallbacks, error) {
 			resp, err := register(origin, cc)
 			if err != nil {
 				return nil, nil, err
