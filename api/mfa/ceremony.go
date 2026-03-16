@@ -42,8 +42,7 @@ type Ceremony struct {
 	// the MFA ceremony will also attempt to retrieve an SSO MFA challenge.
 	SSOMFACeremonyConstructor SSOMFACeremonyConstructor
 
-	// TODO: REMOVE BEFORE REVIEW
-	IsClone bool
+	isRegistering bool
 }
 
 // SSOMFACeremony is an SSO MFA ceremony.
@@ -62,12 +61,6 @@ type CreateAuthenticateChallengeFunc func(ctx context.Context, req *proto.Create
 type CreateRegisterChallengeFunc func(ctx context.Context, req *proto.CreateRegisterChallengeRequest) (*proto.MFARegisterChallenge, error)
 type AddMFADeviceFunc func(ctx context.Context, req *proto.MFARegisterResponse, config RegisterDeviceConfig) error
 type PingFunc func(ctx context.Context) (*webclient.PingResponse, error)
-
-func (c *Ceremony) Clone() *Ceremony {
-	c2 := *c // Shallow copy is enough
-	c2.IsClone = true
-	return &c2
-}
 
 // Run the MFA ceremony.
 //
@@ -125,10 +118,9 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 	}
 
 	// If the user has no device registered, prompt them to register and then re-generate the challenge.
-	println("========= clone", c.IsClone)
 	println("========= challenge creator", c.CreateRegisterChallenge)
 	noRegisteredDevices := chal.WebauthnChallenge == nil && chal.SSOChallenge == nil && chal.TOTP == nil
-	if noRegisteredDevices && c.CreateRegisterChallenge != nil && c.AddMFADevice != nil {
+	if noRegisteredDevices && c.CreateRegisterChallenge != nil && c.AddMFADevice != nil && !c.isRegistering {
 		println("Attempting to register")
 		// // Clone this ceremony and prevent the clone from recursively attempting to
 		// // register a device.
@@ -159,7 +151,15 @@ func (c *Ceremony) Run(ctx context.Context, req *proto.CreateAuthenticateChallen
 }
 
 func (c *Ceremony) Register(ctx context.Context, config RegisterDeviceConfig) (bool, error) {
-	regPrompt := c.PromptConstructor()
+	if c.isRegistering {
+		return false, nil
+	}
+
+	c.isRegistering = true
+	defer func() {
+		c.isRegistering = false
+	}()
+	regPrompt := c.PromptConstructor(func(cfg *PromptConfig) { cfg.MFACeremony = c })
 
 	if config.Type == "" {
 		// If we are prompting the user for the device type, then take a glimpse at

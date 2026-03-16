@@ -500,9 +500,7 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config *mfa.RegisterDeviceC
 	defer webauthnwin.ResetPromptPlatformMessage()
 
 	// TODO: avoid recursive registration if no challenge available. Probably as a promptOpt?
-	ceremony := c.cfg.CeremonyConstructor()
-	createRegisterChallenge := ceremony.CreateRegisterChallenge
-	ceremony.CreateRegisterChallenge = nil
+	ceremony := c.cfg.MFACeremony
 	mfaResp, err := ceremony.Run(ctx, &proto.CreateAuthenticateChallengeRequest{
 		ChallengeExtensions: &mfav1.ChallengeExtensions{
 			Scope: mfav1.ChallengeScope_CHALLENGE_SCOPE_MANAGE_DEVICES,
@@ -512,11 +510,15 @@ func (c *CLIPrompt) AskRegister(ctx context.Context, config *mfa.RegisterDeviceC
 		return nil, nil, trace.Wrap(err)
 	}
 
-	regChal, err := createRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
+	regChal, err := ceremony.CreateRegisterChallenge(ctx, &proto.CreateRegisterChallengeRequest{
 		ExistingMFAResponse: mfaResp,
 		DeviceType:          devTypePB,
-		// TODO: FIX BEFORE REVIEW
-		DeviceUsage: proto.DeviceUsage_DEVICE_USAGE_MFA,
+		DeviceUsage: func() proto.DeviceUsage {
+			if config.AllowPasswordless {
+				return proto.DeviceUsage_DEVICE_USAGE_PASSWORDLESS
+			}
+			return proto.DeviceUsage_DEVICE_USAGE_MFA
+		}(),
 	})
 	if err != nil {
 		return nil, nil, trace.Wrap(err)
@@ -552,7 +554,7 @@ func (n noopRegisterCallback) Confirm() error {
 func (c *CLIPrompt) promptRegisterChallenge(ctx context.Context, proxyAddr, devType string, rc *proto.MFARegisterChallenge) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
 	switch rc.Request.(type) {
 	case *proto.MFARegisterChallenge_TOTP:
-		resp, err := promptTOTPRegisterChallenge(ctx, rc.GetTOTP())
+		resp, err := c.promptTOTPRegisterChallenge(ctx, rc.GetTOTP())
 		return resp, noopRegisterCallback{}, err
 
 	case *proto.MFARegisterChallenge_Webauthn:
@@ -563,7 +565,7 @@ func (c *CLIPrompt) promptRegisterChallenge(ctx context.Context, proxyAddr, devT
 		cc := wantypes.CredentialCreationFromProto(rc.GetWebauthn())
 
 		if devType == touchIDDeviceType {
-			return promptTouchIDRegisterChallenge(origin, cc)
+			return c.promptTouchIDRegisterChallenge(origin, cc)
 		}
 
 		resp, err := c.promptWebauthnRegisterChallenge(ctx, origin, cc)
@@ -574,13 +576,13 @@ func (c *CLIPrompt) promptRegisterChallenge(ctx context.Context, proxyAddr, devT
 	}
 }
 
-func promptTOTPRegisterChallenge(ctx context.Context, c *proto.TOTPRegisterChallenge) (*proto.MFARegisterResponse, error) {
-	secretBin, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(c.Secret)
+func (c *CLIPrompt) promptTOTPRegisterChallenge(ctx context.Context, chal *proto.TOTPRegisterChallenge) (*proto.MFARegisterResponse, error) {
+	secretBin, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(chal.Secret)
 	if err != nil {
-		return nil, trace.BadParameter("server sent an invalid TOTP secret key %q: %v", c.Secret, err)
+		return nil, trace.BadParameter("server sent an invalid TOTP secret key %q: %v", chal.Secret, err)
 	}
 	var algorithm otp.Algorithm
-	switch strings.ToUpper(c.Algorithm) {
+	switch strings.ToUpper(chal.Algorithm) {
 	case "SHA1":
 		algorithm = otp.AlgorithmSHA1
 	case "SHA256":
@@ -590,14 +592,14 @@ func promptTOTPRegisterChallenge(ctx context.Context, c *proto.TOTPRegisterChall
 	case "MD5":
 		algorithm = otp.AlgorithmMD5
 	default:
-		return nil, trace.BadParameter("server sent an unknown TOTP algorithm %q", c.Algorithm)
+		return nil, trace.BadParameter("server sent an unknown TOTP algorithm %q", chal.Algorithm)
 	}
 	otpKey, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      c.Issuer,
-		AccountName: c.Account,
-		Period:      uint(c.PeriodSeconds),
+		Issuer:      chal.Issuer,
+		AccountName: chal.Account,
+		Period:      uint(chal.PeriodSeconds),
 		Secret:      secretBin,
-		Digits:      otp.Digits(c.Digits),
+		Digits:      otp.Digits(chal.Digits),
 		Algorithm:   algorithm,
 	})
 	if err != nil {
@@ -615,41 +617,41 @@ func promptTOTPRegisterChallenge(ctx context.Context, c *proto.TOTPRegisterChall
 		defer closeQR()
 	}
 
-	fmt.Println()
+	fmt.Fprintln(c.stdout())
 	if showingQRCode {
-		fmt.Println("Open your TOTP app and scan the QR code. Alternatively, you can manually enter these fields:")
+		fmt.Fprintln(c.stdout(), "Open your TOTP app and scan the QR code. Alternatively, you can manually enter these fields:")
 	} else {
-		fmt.Println("Open your TOTP app and create a new manual entry with these fields:")
+		fmt.Fprintln(c.stdout(), "Open your TOTP app and create a new manual entry with these fields:")
 	}
-	fmt.Printf(`  URL: %s
+	fmt.Fprintf(c.stdout(), `  URL: %s
   Account name: %s
   Secret key: %s
   Issuer: %s
   Algorithm: %s
   Number of digits: %d
   Period: %ds
-`, otpKey.URL(), c.Account, c.Secret, c.Issuer, c.Algorithm, c.Digits, c.PeriodSeconds)
-	fmt.Println()
+`, otpKey.URL(), chal.Account, chal.Secret, chal.Issuer, chal.Algorithm, chal.Digits, chal.PeriodSeconds)
+	fmt.Fprintln(c.stdout())
 
 	var totpCode string
 	// Help the user with typos, don't submit the code until it has the right
 	// length.
 	for {
 		totpCode, err = prompt.Password(
-			ctx, os.Stdout, prompt.Stdin(), "Once created, enter an OTP code generated by the app")
+			ctx, c.stdout(), prompt.Stdin(), "Once created, enter an OTP code generated by the app")
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
-		if len(totpCode) == int(c.Digits) {
+		if len(totpCode) == int(chal.Digits) {
 			break
 		}
-		fmt.Printf("TOTP code must be exactly %d digits long, try again\n", c.Digits)
+		fmt.Fprintf(c.stdout(), "TOTP code must be exactly %d digits long, try again\n", chal.Digits)
 	}
 	return &proto.MFARegisterResponse{
 		Response: &proto.MFARegisterResponse_TOTP{
 			TOTP: &proto.TOTPRegisterResponse{
 				Code: totpCode,
-				ID:   c.ID,
+				ID:   chal.ID,
 			},
 		},
 	}, nil
@@ -661,7 +663,7 @@ func (c *CLIPrompt) promptWebauthnRegisterChallenge(ctx context.Context, origin 
 		"origin", origin,
 	)
 
-	prompt := wancli.NewDefaultPrompt(ctx, os.Stdout)
+	prompt := wancli.NewDefaultPrompt(ctx, c.stdout())
 	prompt.PINMessage = "Enter your *new* security key PIN"
 	prompt.FirstTouchMessage = "Tap your *new* security key"
 	prompt.SecondTouchMessage = "Tap your *new* security key again to complete registration"
@@ -670,11 +672,20 @@ func (c *CLIPrompt) promptWebauthnRegisterChallenge(ctx context.Context, origin 
 	return resp, trace.Wrap(err)
 }
 
-func promptTouchIDRegisterChallenge(origin string, cc *wantypes.CredentialCreation) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
+func (c *CLIPrompt) promptTouchIDRegisterChallenge(origin string, cc *wantypes.CredentialCreation) (*proto.MFARegisterResponse, mfa.RegisterCallback, error) {
 	slog.DebugContext(context.TODO(), "prompting registration with origin",
 		teleport.ComponentKey, "TouchID",
 		"origin", origin,
 	)
+
+	registerFunc := c.cfg.TouchIDRegisterFunc
+	if registerFunc != nil {
+		resp, callback, err := registerFunc(origin, cc)
+		if err != nil {
+			return nil, nil, trace.Wrap(err)
+		}
+		return resp, callback, nil
+	}
 
 	reg, err := touchid.Register(origin, cc)
 	if err != nil {
