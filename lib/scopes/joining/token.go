@@ -83,8 +83,8 @@ func validateJoinMethod(token *joiningv1.ScopedToken) error {
 		}
 	case types.JoinMethodKubernetes:
 		kube := token.GetSpec().GetKubernetes()
-		if kube == nil {
-			return trace.BadParameter("kubernetes configuration must be defined for a scoped token when using the kubernetes join method")
+		if kube == nil || len(kube.GetAllow()) == 0 {
+			return trace.BadParameter("kubernetes configuration allowing at least one service account must be defined for a scoped token when using the kubernetes join method")
 		}
 		switch types.KubernetesJoinType(kube.GetType()) {
 		case types.KubernetesJoinTypeInCluster:

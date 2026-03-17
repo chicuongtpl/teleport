@@ -294,8 +294,19 @@ func TestValidateScopedToken(t *testing.T) {
 			modFn: func(tok *joiningv1.ScopedToken) {
 				tok.Spec.JoinMethod = string(types.JoinMethodKubernetes)
 			},
-			expectedStrongErr: "kubernetes configuration must be defined for a scoped token when using the kubernetes join method",
-			expectedWeakErr:   "kubernetes configuration must be defined for a scoped token when using the kubernetes join method",
+			expectedStrongErr: "kubernetes configuration allowing at least one service account must be defined for a scoped token when using the kubernetes join method",
+			expectedWeakErr:   "kubernetes configuration allowing at least one service account must be defined for a scoped token when using the kubernetes join method",
+		},
+		{
+			name: "kubernetes token with empty allow rules",
+			modFn: func(tok *joiningv1.ScopedToken) {
+				tok.Spec.JoinMethod = string(types.JoinMethodKubernetes)
+				tok.Spec.Kubernetes = &joiningv1.Kubernetes{
+					Allow: []*joiningv1.Kubernetes_Rule{},
+				}
+			},
+			expectedStrongErr: "kubernetes configuration allowing at least one service account must be defined for a scoped token when using the kubernetes join method",
+			expectedWeakErr:   "kubernetes configuration allowing at least one service account must be defined for a scoped token when using the kubernetes join method",
 		},
 		{
 			name: "kubernetes token with unrecognized join type",
