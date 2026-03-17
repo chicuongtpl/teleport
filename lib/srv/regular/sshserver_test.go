@@ -16,6 +16,28 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// TODO(russjones): Following tests are flaky:
+// * TestAgentForward:
+// --- FAIL: TestAgentForward (121.27s)
+//     sshserver_test.go:1341:
+//                 Error Trace:    /Users/rjones/Development/go/src/github.com/gravitational/teleport/lib/srv/regular/sshserver_test.go:1341
+//                 Error:          Received unexpected error:
+//                                 context deadline exceeded, ssh: handshake failed: agent: client error: EOF
+//                 Test:           TestAgentForward
+// --- FAIL: TestAllowedLabels (0.03s)
+//     --- FAIL: TestAllowedLabels/Valid_Static (0.03s)
+//         sshserver_test.go:1649:
+//                 Error Trace:    /Users/rjones/Development/go/src/github.com/gravitational/teleport/lib/srv/regular/sshserver_test.go:1649
+//                 Error:          Received unexpected error:
+//                                 ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain
+//                 Test:           TestAllowedLabels/Valid_Static
+//     --- FAIL: TestAllowedLabels/Valid_Dynamic (0.01s)
+//         sshserver_test.go:1649:
+//                 Error Trace:    /Users/rjones/Development/go/src/github.com/gravitational/teleport/lib/srv/regular/sshserver_test.go:1649
+//                 Error:          Received unexpected error:
+//                                 ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain
+//                 Test:           TestAllowedLabels/Valid_Dynamic
+
 package regular
 
 import (
