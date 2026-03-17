@@ -2789,7 +2789,7 @@ func TestSSHAddingMFA(t *testing.T) {
 				AddString("y").        // Yes, create a new one
 				AddString("webauthn"). // Device type
 				AddString("mykey").    // Device name
-				AddString("n"),        // Don't allow passwordless
+				AddString("NO"),       // Don't allow passwordless
 			assertFn: func(t *testing.T, stdout string, err error) {
 				require.NoError(t, err)
 				assert.Contains(t, stdout, mfaRegistrationQuestion)
