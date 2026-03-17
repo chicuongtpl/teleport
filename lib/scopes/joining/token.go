@@ -82,8 +82,22 @@ func validateJoinMethod(token *joiningv1.ScopedToken) error {
 			return trace.BadParameter("oracle configuration must be defined for a scoped token when using the oracle join method")
 		}
 	case types.JoinMethodKubernetes:
-		if token.GetSpec().GetKubernetes() == nil {
+		kube := token.GetSpec().GetKubernetes()
+		if kube == nil {
 			return trace.BadParameter("kubernetes configuration must be defined for a scoped token when using the kubernetes join method")
+		}
+		switch types.KubernetesJoinType(kube.GetType()) {
+		case types.KubernetesJoinTypeInCluster:
+		case types.KubernetesJoinTypeStaticJWKS:
+			if kube.GetStaticJwks().GetJwks() == "" {
+				return trace.BadParameter("a JWKS must be provided when using the static_jwks kubernetes join type")
+			}
+		case types.KubernetesJoinTypeOIDC:
+			if kube.GetOidc().GetIssuer() == "" {
+				return trace.BadParameter("an OIDC issuer must be provided when using the oidc kubernetes join type")
+			}
+		default:
+			return trace.BadParameter("unrecognized kubernetes join type %q", kube.GetType())
 		}
 	default:
 		return trace.BadParameter("join method %q does not support scoping", token.GetSpec().GetJoinMethod())
