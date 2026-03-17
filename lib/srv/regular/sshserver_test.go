@@ -932,9 +932,9 @@ func setPortForwarding(t *testing.T, ctx context.Context, f *sshTestFixture, leg
 	require.NoError(t, err)
 }
 
-// TestDirectTCPIP ensures that the server can create a "direct-tcpip"
-// channel to the target address. The "direct-tcpip" channel is what port
-// forwarding is built upon.
+// TestDirectTCPIP ensures that the server can create a "direct-tcpip" channel
+// to the target address. The "direct-tcpip" channel is what port forwarding is
+// built upon.
 func TestDirectTCPIP(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -971,7 +971,6 @@ func TestDirectTCPIP(t *testing.T) {
 		}
 
 		// Perform a HTTP GET to the test HTTP server through a "direct-tcpip" request.
-		fmt.Printf("--> Dialing to: %v\n", ts.URL)
 		resp, err := httpClient.Get(ts.URL)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -1056,6 +1055,7 @@ func TestDirectTCPIP(t *testing.T) {
 				},
 			},
 		}
+
 		//nolint:bodyclose // We expect an error here, no need to close.
 		_, err := httpClientUsingSessionJoin.Get(ts.URL)
 		require.ErrorContains(t, err, "ssh: rejected: administratively prohibited (attempted direct-tcpip channel open in join-only mode")
