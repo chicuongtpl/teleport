@@ -234,7 +234,7 @@ jobs:
         run: mkdir -p ~/.docker && echo '{}' > ~/.docker/config.json
 
       - name: Run tests
-        run: e2e/runner/e2e --no-build --full
+        run: xvfb-run e2e/runner/e2e --no-build --full
         env:
           E2E_CALLER_DIR: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ github.token }}
