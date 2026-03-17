@@ -136,7 +136,6 @@ jobs:
             build/tsh-e2e-webauthnmock
             e2e/runner/e2e
             web/packages/teleterm/build/
-            web/packages/teleterm/node_modules/electron/
           retention-days: 1
 
       # TODO: revert to `if: github.event_name == 'push'` after testing
@@ -201,15 +200,21 @@ jobs:
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
           apt-get update && apt-get install -y docker-ce-cli
 
+      - name: Restore pnpm cache
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
       - name: Setup e2e environment
         run: |
           until docker info >/dev/null 2>&1; do sleep 1; done
           docker pull debian:bookworm-slim &
 
           corepack enable
-          cd e2e && pnpm install --frozen-lockfile
-
-          pnpm type-check
+          (pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild electron) &
+          (cd e2e && pnpm install --frozen-lockfile && pnpm type-check) &
 
           wait
 
@@ -224,7 +229,6 @@ jobs:
           chmod +x build/tctl
           chmod +x build/tsh-e2e-webauthnmock
           chmod +x e2e/runner/e2e
-          chmod +x web/packages/teleterm/node_modules/electron/dist/electron
 
       - name: Create Docker config
         run: mkdir -p ~/.docker && echo '{}' > ~/.docker/config.json
