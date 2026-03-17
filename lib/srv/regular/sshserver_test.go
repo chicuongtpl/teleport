@@ -38,10 +38,25 @@
 //                                 ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain
 //                 Test:           TestAllowedLabels/Valid_Dynamic
 
+//--- FAIL: TestDirectTCPIP (0.00s)
+//    --- FAIL: TestDirectTCPIP/Local_forwarding_fails_when_access_is_denied_by_legacy_config (0.04s)
+//    --- PASS: TestDirectTCPIP/SessionJoinPrincipal_cannot_use_direct-tcpip (0.10s)
+//    --- FAIL: TestDirectTCPIP/Local_forwarding_fails_when_access_is_denied (0.08s)
+//    --- PASS: TestDirectTCPIP/Local_forwarding_is_successful (0.17s)
+//
+//--- FAIL: TestTCPIPForward (0.00s)
+//        --- FAIL: TestTCPIPForward/localhost (0.02s)
+//        --- FAIL: TestTCPIPForward/local_deny (0.02s)
+//        --- FAIL: TestTCPIPForward/legacy_deny (0.02s)
+//        --- FAIL: TestTCPIPForward/remote_deny (0.03s)
+//        --- PASS: TestTCPIPForward/SessionJoinPrincipal_cannot_use_tcpip-forward (0.04s)
+//        --- FAIL: TestTCPIPForward/ip_address (0.03s)
+
 package regular
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -956,6 +971,7 @@ func TestDirectTCPIP(t *testing.T) {
 		}
 
 		// Perform a HTTP GET to the test HTTP server through a "direct-tcpip" request.
+		fmt.Printf("--> Dialing to: %v\n", ts.URL)
 		resp, err := httpClient.Get(ts.URL)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -1653,9 +1669,13 @@ func TestAllowedLabels(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
-			up, err := newUpack(t.Context(), f.testSrv, f.user, []string{f.user}, tt.inLabelMap)
+			// TODO(russjones): This has to run serially, because at each iteration of the loop
+			// a role with the same name is updated.
+			// TODO(russjones): Explain why the user is rand.Text() here.
+			up, err := newUpack(t.Context(), f.testSrv, rand.Text(), []string{f.user}, tt.inLabelMap)
 			require.NoError(t, err)
 
 			sshConfig := &ssh.ClientConfig{
