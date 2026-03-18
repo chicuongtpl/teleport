@@ -2899,6 +2899,7 @@ func (a *Server) GenerateOpenSSHCert(ctx context.Context, req *proto.OpenSSHCert
 			return nil, trace.Wrap(err)
 		}
 	} else {
+		// add implicit roles to the set and build a checker
 		accessInfo := services.AccessInfoFromUserState(req.User)
 		roles := make([]types.Role, len(req.Roles))
 		for i := range req.Roles {

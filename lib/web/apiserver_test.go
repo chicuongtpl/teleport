@@ -8771,7 +8771,7 @@ func createProxy(ctx context.Context, t *testing.T, proxyID string, node *regula
 		FIPS:   false,
 		Logger: logtest.NewLogger(),
 		Dialer: router,
-	SignerFn: func(authzCtx *authz.ScopedContext, clusterName string) agentless.SignerCreator {
+		SignerFn: func(authzCtx *authz.ScopedContext, clusterName string) agentless.SignerCreator {
 			if unscopedCtx, ok := authzCtx.UnscopedContext(); ok {
 				return agentless.SignerFromAuthzContext(unscopedCtx, client, clusterName)
 			}
