@@ -1,0 +1,55 @@
+---
+title: "Step 7 - Enable Machine & Workload Identity"
+description: "Issue short-lived credentials to services and workloads in your infrastructure using Machine & Workload Identity."
+toc_max_heading_level: 2
+tags:
+  - get-started
+  - machine-id
+  - workload-identity
+---
+
+import Button from '@site/src/components/Button';
+import Icon from '@site/src/components/Icon';
+
+## Machine ID
+
+- TODO: Describe the tbot daemon and how it fetches certs from the Auth Service
+- TODO: Explain the role of join tokens and bot resources
+- TODO: Explain what must be deployed in the user's environment (tbot)
+- TODO: Note that the Web UI provides guided flows for GitHub Actions
+
+### GitHub Actions and Kubernetes
+
+- TODO: Explain the guided flow for GitHub Actions + Kubernetes in the Web UI
+- TODO: Describe what the wizard configures (bot, role, ProvisionToken)
+- TODO: Summarize what the user gets at the end (Terraform + workflow template)
+
+### GitHub Actions and SSH
+
+- TODO: Explain the guided flow for GitHub Actions + SSH in the Web UI
+- TODO: Describe what user inputs are required (bot name, labels, SSH user)
+- TODO: Summarize the output (workflow YAML snippet)
+
+### Other deployment options
+
+- TODO: edit link: [Deployment](../machine-workload-identity/deployment/deployment.mdx)
+- TODO: List available deployment guides (CircleCI, GitLab, Jenkins, etc.)
+
+## Workload Identity
+
+- TODO: Explain SPIFFE and the SPIFFE ID's role in workload identity
+- TODO: Describe what tbot does when issuing SVIDs to workloads
+- TODO: Explain what must be deployed (tbot, workload attestation config)
+- TODO: Note that there are no guided UI flows; setup is via tbot config
+- TODO: edit link: [Workload Identity introduction](../machine-workload-identity/workload-identity/introduction.mdx)
+- TODO: edit link: [Getting Started with Workload Identity](../machine-workload-identity/workload-identity/getting-started.mdx)
+- TODO: Note federation options (AWS OIDC, GCP, Azure, Roles Anywhere)
+
+## Next steps
+
+In Step 8, we'll show you how to enable Identity Security to gain visibility
+into access patterns and standing privileges across your infrastructure.
+
+<div style={{ marginTop: 'var(--m-4)' }}>
+  <Button style={{ padding: '0 var(--m-2)' }} as="link" href="../identity-security/" variant="primary" shape="lg">Step 8 - Enable Identity Security <Icon name="arrowRight" inline size="sm"/> </Button>
+</div>
