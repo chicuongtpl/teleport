@@ -1105,6 +1105,7 @@ func TestTCPIPForward(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			f := newFixtureWithoutDiskBasedLogging(t)
+
 			setPortForwarding(t, t.Context(), f, tc.legacyAllow, tc.remoteAllow, tc.localAllow)
 
 			// create a new client connection to the node which will have its permissions
@@ -1123,11 +1124,15 @@ func TestTCPIPForward(t *testing.T) {
 			}
 
 			// Start up a test server that uses the port forwarded listener.
-			ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// TODO(russjones): Explain why this is better than NewUnstartedServer (no double listener)
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintln(w, "hello, world")
-			}))
+			})
+			ts := &httptest.Server{
+				Listener: listener,
+				Config:   &http.Server{Handler: handler},
+			}
 			t.Cleanup(ts.Close)
-			ts.Listener = listener
 			ts.Start()
 
 			// Dial the test server over the SSH connection.

@@ -901,7 +901,11 @@ func handleNetworkingRequest(ctx context.Context, conn *net.UnixConn, req networ
 		conn.Write([]byte(trace.Wrap(err, "failed to create networking file").Error()))
 		return nil
 	}
-	keepOpen := req.Operation == networking.NetworkingOperationDial
+	//keepOpen := req.Operation == networking.NetworkingOperationDial
+	var keepOpen bool
+	if req.Operation == networking.NetworkingOperationDial || req.Operation == networking.NetworkingOperationListen {
+		keepOpen = true
+	}
 	if !keepOpen {
 		defer netFile.Close()
 	}
