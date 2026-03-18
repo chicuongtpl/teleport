@@ -57,7 +57,7 @@ type LocalAccessPoint interface {
 
 // SignerCreator returns an [ssh.Signer] that can be used to authenticate
 // with an agentless node.
-type SignerCreator func(ctx context.Context, localAccessPoint LocalAccessPoint, certGen CertGenerator) (ssh.Signer, error)
+type SignerCreator func(ctx context.Context, localAccessPoint LocalAccessPoint, certGen CertGenerator, targetScope string) (ssh.Signer, error)
 
 // SignerFromSSHIdentity returns a function that attempts to
 // create a [ssh.Signer] for the Identity in the provided [ssh.Certificate]
@@ -66,7 +66,7 @@ type SignerCreator func(ctx context.Context, localAccessPoint LocalAccessPoint, 
 // passed into the returned function must be connected to the same cluster
 // as the target node.
 func SignerFromSSHIdentity(ident *sshca.Identity, authClient AuthProvider, clusterName, teleportUser string) SignerCreator {
-	return func(ctx context.Context, localAccessPoint LocalAccessPoint, certGen CertGenerator) (ssh.Signer, error) {
+	return func(ctx context.Context, localAccessPoint LocalAccessPoint, certGen CertGenerator, targetScope string) (ssh.Signer, error) {
 		u, err := authClient.GetUser(ctx, teleportUser, false)
 		if err != nil {
 			return nil, trace.Wrap(err)
@@ -110,18 +110,28 @@ func SignerFromSSHIdentity(ident *sshca.Identity, authClient AuthProvider, clust
 // passed into the returned function must be connected to the same cluster
 // as the target node.
 func SignerFromAuthzContext(authzCtx *authz.Context, authClient AuthProvider, clusterName string) SignerCreator {
-	return func(ctx context.Context, localAccessPoint LocalAccessPoint, certGen CertGenerator) (ssh.Signer, error) {
-		u, ok := authzCtx.User.(*types.UserV2)
+	return signerFromIdentity(authzCtx.User, authzCtx.Identity, authClient, clusterName)
+}
+
+// SignerFromScopedContext returns a function that attempts to create a [ssh.Signer]
+// for a scoped identity.
+func SignerFromScopedContext(authzCtx *authz.ScopedContext, authClient AuthProvider, clusterName string) SignerCreator {
+	return signerFromIdentity(authzCtx.User, authzCtx.Identity, authClient, clusterName)
+}
+
+func signerFromIdentity(user types.User, identityGetter authz.IdentityGetter, authClient AuthProvider, clusterName string) SignerCreator {
+	return func(ctx context.Context, localAccessPoint LocalAccessPoint, certGen CertGenerator, targetScope string) (ssh.Signer, error) {
+		u, ok := user.(*types.UserV2)
 		if !ok {
 			return nil, trace.BadParameter("unsupported user type %T", u)
 		}
-		// copy the user to avoid changing it in authzCtx
-		user := u.DeepCopy().(*types.UserV2)
+		// copy the user to avoid mutating the original
+		userCopy := u.DeepCopy().(*types.UserV2)
 
 		// set the user's roles and traits so impersonation will work correctly
-		identity := authzCtx.Identity.GetIdentity()
-		user.SetRoles(identity.Groups)
-		user.SetTraits(identity.Traits)
+		identity := identityGetter.GetIdentity()
+		userCopy.SetRoles(identity.Groups)
+		userCopy.SetTraits(identity.Traits)
 
 		// fetch local roles so if the certificate is generated on a leaf
 		// cluster it won't have to lookup unknown roles
@@ -132,9 +142,10 @@ func SignerFromAuthzContext(authzCtx *authz.Context, authClient AuthProvider, cl
 
 		params := certParams{
 			clusterName:  clusterName,
-			teleportUser: user,
+			teleportUser: userCopy,
 			roles:        roles,
 			ttl:          time.Until(identity.Expires),
+			targetScope:  targetScope,
 		}
 		signer, err := createAuthSigner(ctx, params, localAccessPoint, certGen)
 		if err != nil {
@@ -167,6 +178,7 @@ type certParams struct {
 	teleportUser *types.UserV2
 	roles        []*types.RoleV6
 	ttl          time.Duration
+	targetScope  string
 }
 
 // createAuthSigner creates a [ssh.Signer] that is signed with
@@ -184,11 +196,12 @@ func createAuthSigner(ctx context.Context, params certParams, localAccessPoint L
 
 	// sign new public key with OpenSSH CA
 	reply, err := certGen.GenerateOpenSSHCert(ctx, &proto.OpenSSHCertRequest{
-		User:      params.teleportUser,
-		Roles:     params.roles,
-		PublicKey: priv.MarshalSSHPublicKey(),
-		TTL:       proto.Duration(params.ttl),
-		Cluster:   params.clusterName,
+		User:            params.teleportUser,
+		Roles:           params.roles,
+		PublicKey:       priv.MarshalSSHPublicKey(),
+		TTL:             proto.Duration(params.ttl),
+		Cluster:         params.clusterName,
+		TargetNodeScope: params.targetScope,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)

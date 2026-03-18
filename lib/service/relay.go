@@ -339,7 +339,7 @@ func (process *TeleportProcess) runRelayService() error {
 		Logger: sublogger("transport_service"),
 		Dialer: relayRouter,
 		SignerFn: func(*authz.ScopedContext, string) agentless.SignerCreator {
-			return func(context.Context, agentless.LocalAccessPoint, agentless.CertGenerator) (ssh.Signer, error) {
+			return func(context.Context, agentless.LocalAccessPoint, agentless.CertGenerator, string) (ssh.Signer, error) {
 				// the behavior of relayRouter is such that we should never
 				// attempt to connect to an agentless server
 				return nil, trace.Errorf("connections to agentless servers are not supported (this is a bug)")

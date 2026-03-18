@@ -244,7 +244,7 @@ func newServer(t *testing.T, cfg ServerConfig) testPack {
 }
 
 func fakeSigner(authzCtx *authz.ScopedContext, clusterName string) agentless.SignerCreator {
-	return func(_ context.Context, _ agentless.LocalAccessPoint, _ agentless.CertGenerator) (ssh.Signer, error) {
+	return func(_ context.Context, _ agentless.LocalAccessPoint, _ agentless.CertGenerator, _ string) (ssh.Signer, error) {
 		return nil, nil
 	}
 }

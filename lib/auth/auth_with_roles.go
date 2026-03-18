@@ -1010,9 +1010,7 @@ func (a *ServerWithRoles) UpsertNode(ctx context.Context, s types.Server) (*type
 	if err := a.authorizeAction(types.KindNode, types.VerbCreate, types.VerbUpdate); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	if s.GetScope() != "" {
-		return nil, trace.BadParameter("UpsertNode does not yet support scoped resources")
-	}
+
 	return a.authServer.UpsertNode(ctx, s)
 }
 

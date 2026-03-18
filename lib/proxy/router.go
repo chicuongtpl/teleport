@@ -288,7 +288,7 @@ func (r *Router) DialHost(ctx context.Context, scopePin *scopesv1.Pin, clientSrc
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
-			sshSigner, err = signer(ctx, r.localAccessPoint, client)
+			sshSigner, err = signer(ctx, r.localAccessPoint, client, target.GetScope())
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
@@ -307,6 +307,7 @@ func (r *Router) DialHost(ctx context.Context, scopePin *scopesv1.Pin, clientSrc
 		ProxyIDs:              target.GetProxyIDs(),
 		ConnType:              types.NodeTunnel,
 		TargetServer:          target,
+		TargetScope:           target.GetScope(),
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)

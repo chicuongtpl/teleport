@@ -859,7 +859,7 @@ func TestRouter_DialHost(t *testing.T) {
 	agentGetter := func() (sshagent.Client, error) {
 		return nil, nil
 	}
-	createSigner := func(_ context.Context, _ agentless.LocalAccessPoint, _ agentless.CertGenerator) (ssh.Signer, error) {
+	createSigner := func(_ context.Context, _ agentless.LocalAccessPoint, _ agentless.CertGenerator, _ string) (ssh.Signer, error) {
 		key, err := cryptosuites.GenerateKeyWithAlgorithm(cryptosuites.Ed25519)
 		if err != nil {
 			return nil, err

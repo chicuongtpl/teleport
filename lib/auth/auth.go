@@ -2806,6 +2806,8 @@ type certRequest struct {
 	joinAttributes *workloadidentityv1pb.JoinAttrs
 	// requesterName is the name of the service that sent the request.
 	requesterName proto.UserCertsRequest_Requester
+	// targetNodeScope is the scope of the target OpenSSH node.
+	targetNodeScope string
 }
 
 // check verifies the cert request is valid.
@@ -2880,23 +2882,36 @@ func (a *Server) GenerateOpenSSHCert(ctx context.Context, req *proto.OpenSSHCert
 		return nil, trace.BadParameter("cluster is empty")
 	}
 
-	// add implicit roles to the set and build a checker
-	accessInfo := services.AccessInfoFromUserState(req.User)
-	roles := make([]types.Role, len(req.Roles))
-	for i := range req.Roles {
-		var err error
-		roles[i], err = services.ApplyTraits(req.Roles[i], req.User.GetTraits())
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-	}
-	roleSet := services.NewRoleSet(roles...)
-
 	clusterName, err := a.GetClusterName(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	checker := services.NewAccessCheckerWithRoleSet(accessInfo, clusterName.GetClusterName(), roleSet)
+
+	var checkerContext *services.SplitAccessCheckerContext
+	if req.TargetNodeScope != "" {
+		if err := scopes.StrongValidate(req.TargetNodeScope); err != nil {
+			return nil, trace.Wrap(err)
+		}
+		// build the checkerContext here so that we can extract the logins later and other scoped
+		// cert params
+		checkerContext, err = a.accessCheckerForScope(ctx, req.TargetNodeScope, req.User)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+	} else {
+		accessInfo := services.AccessInfoFromUserState(req.User)
+		roles := make([]types.Role, len(req.Roles))
+		for i := range req.Roles {
+			var err error
+			roles[i], err = services.ApplyTraits(req.Roles[i], req.User.GetTraits())
+			if err != nil {
+				return nil, trace.Wrap(err)
+			}
+		}
+		roleSet := services.NewRoleSet(roles...)
+		checker := services.NewAccessCheckerWithRoleSet(accessInfo, clusterName.GetClusterName(), roleSet)
+		checkerContext = services.NewUnscopedSplitAccessCheckerContext(checker)
+	}
 
 	sessionTTL := time.Duration(req.TTL)
 
@@ -2923,11 +2938,12 @@ func (a *Server) GenerateOpenSSHCert(ctx context.Context, req *proto.OpenSSHCert
 		user:            req.User,
 		sshPublicKey:    req.PublicKey,
 		compatibility:   constants.CertificateFormatStandard,
-		checkerContext:  services.NewUnscopedSplitAccessCheckerContext(checker), // TODO(fspmarshall/scopes): add scoping support to OpenSSH certs.
+		checkerContext:  checkerContext,
 		ttl:             sessionTTL,
 		traits:          req.User.GetTraits(),
 		routeToCluster:  req.Cluster,
 		disallowReissue: true,
+		targetNodeScope: req.TargetNodeScope,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -3612,11 +3628,8 @@ func generateCert(ctx context.Context, a *Server, req certRequest, caType types.
 			return nil, trace.Wrap(err)
 		}
 
-		if caType == types.OpenSSHCA {
-			// This restriction *must* not be removed until we rework how logins are handled for openssh certs. Currently, openssh certs contain *all* the
-			// logins the user's role set permits. This isn't sound for scoped access. We will need to instead issue openssh certs with only the subset of
-			// logins that are granted by the specific scoped role that permitted the access attempt.
-			return nil, trace.NotImplemented("scoped certificates for openssh access are not yet supported")
+		if caType == types.OpenSSHCA && req.targetNodeScope == "" {
+			return nil, trace.BadParameter("scoped OpenSSH certificates require a target scope")
 		}
 	}
 
@@ -3686,6 +3699,12 @@ func generateCert(ctx context.Context, a *Server, req certRequest, caType types.
 		// logins are returned for the role set.
 		sessionTTL = req.ttl
 		allowedLogins, err = certParams.GetSSHLoginsForTTL(ctx, 0)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+	} else if caType == types.OpenSSHCA && req.targetNodeScope != "" {
+		sessionTTL = certParams.AdjustSessionTTL(req.ttl)
+		allowedLogins, err = certParams.GetSSHLoginsForScopedOpenSSH(ctx, req.targetNodeScope)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -3826,6 +3845,8 @@ func generateCert(ctx context.Context, a *Server, req certRequest, caType types.
 		roleNames = unscoped.RoleNames()
 		allowedResourceAccessIDs = unscoped.GetAllowedResourceAccessIDs()
 	}
+
+	// Missing ScopedCert Params here? If so, what would it contain?
 
 	var signedSSHCert []byte
 	if req.sshPublicKey != nil {

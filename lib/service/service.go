@@ -5800,10 +5800,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				return agentless.SignerFromAuthzContext(unscopedCtx, accessPoint, clusterName)
 			}
 
-			return func(ctx context.Context, localAccessPoint agentless.LocalAccessPoint, certGen agentless.CertGenerator) (ssh.Signer, error) {
-				// TODO(fspamarshall/scopes): implement agentless transport signer for scoped identities
-				return nil, trace.NotImplemented("agentless transport signer is not implemented for scoped identities")
-			}
+			return agentless.SignerFromScopedContext(authzCtx, accessPoint, clusterName)
 		},
 		ConnectionMonitor: connMonitor,
 		LocalAddr:         listeners.sshGRPC.Addr(),

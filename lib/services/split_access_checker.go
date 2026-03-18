@@ -80,7 +80,7 @@ type UnscopedAccessCheckerSubset interface {
 // SplitAccessChecker is used in logic that needs to branch based on whether it is operating on a scoped or unscoped access checker. It
 // provides a Common interface that is always present, and one of either a Scoped or Unscoped interface that is present depending on
 // which underlying access checker is being used. If a method that previously existed on one of the Subset interfaces is implemented
-// by the second checker and moved to the Common interface, then the it should be removed from the Subset interface in order to ensure
+// by the second checker and moved to the Common interface, then it should be removed from the Subset interface in order to ensure
 // that we don't continue to accidentally call it on the old location.
 type SplitAccessChecker struct {
 	common   CommonAccessChecker
@@ -423,7 +423,7 @@ func (n *CertificateParameterContext) GetSSHLoginsForTTL(ctx context.Context, tt
 	// grant access without knowing the target resource.
 	loginSet := make(map[string]struct{})
 
-	// Use of RisyEnumerateCheckers is acceptable here because we are deliberately attempting to aggregate
+	// Use of RiskyEnumerateCheckers is acceptable here because we are deliberately attempting to aggregate
 	// information across all roles, rather than making a specific access-control decision.
 	for checker, err := range n.ctx.scopedContext.RiskyEnumerateCheckers(ctx) {
 		if err != nil {
@@ -457,6 +457,29 @@ func (n *CertificateParameterContext) GetSSHLoginsForTTL(ctx context.Context, tt
 	}
 
 	return logins, nil
+}
+
+// GetSSHLoginsForScopedOpenSSH returns the logins for a scoped OpenSSH certificate by evaluating
+// checkers for the specific target resource scope. It iterates checkers in scope hierarchy order
+// and returns the logins that have access to targetScope.
+//
+// ie) if the targetScope is /foo/bar, we return logins from roles assigned
+// at /foo/bar and its ancestor scopes (/foo, /), but not descendant scopes
+// like /foo/bar/staging
+func (n *CertificateParameterContext) GetSSHLoginsForScopedOpenSSH(ctx context.Context, targetScope string) ([]string, error) {
+	if n.ctx.scopedContext == nil {
+		return nil, trace.BadParameter("GetSSHLoginsForScopedOpenSSH requires a scoped access checker context")
+	}
+	loginsForScope := []string{}
+	for checker, err := range n.ctx.scopedContext.CheckersForResourceScope(ctx, targetScope) {
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		loginsForScope = append(loginsForScope, checker.GetSSHLogins()...)
+	}
+
+	// No role granted access with usable logins at this scope.
+	return loginsForScope, nil
 }
 
 // AdjustSessionTTL adjusts the requested session TTL based on role/configuration policies.

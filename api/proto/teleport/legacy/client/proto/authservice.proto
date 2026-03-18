@@ -116,6 +116,8 @@ message OpenSSHCertRequest {
   // Roles are the roles of the Teleport user the certificate will be
   // generated for.
   repeated types.RoleV6 Roles = 6 [(gogoproto.jsontag) = "roles"];
+  // TargetNodeScope is the scope of the target OpenSSH node.
+  string TargetNodeScope = 7 [(gogoproto.jsontag) = "target_node_scope"];
 }
 
 // OpenSSHCert is a SSH certificate signed by OpenSSH CA.
