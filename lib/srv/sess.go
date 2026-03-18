@@ -1496,26 +1496,25 @@ func (s *session) startInteractive(ctx context.Context, scx *ServerContext, p *p
 }
 
 func (s *session) startTerminal(ctx context.Context, scx *ServerContext, ch ssh.Channel) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.isStopped() {
+		return errors.New("session stopped before terminal could start")
+	}
+
 	term, err := scx.TakeTerm(ch)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
+	s.term = term
 	if err := term.Run(ctx); err != nil {
 		term.Close()
 		s.logger.ErrorContext(ctx, "Unable to run shell command.", "error", err)
 		return trace.ConvertSystemError(err)
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.isStopped() {
-		term.Close()
-		return errors.New("session stopped before terminal could start")
-	}
-
-	s.term = term
 	return nil
 }
 

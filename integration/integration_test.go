@@ -2199,8 +2199,27 @@ func testEnvironmentVariables(t *testing.T, suite *integrationTestSuite) {
 	})
 	require.NoError(t, err)
 
-	// The Web address should be set in the session env vars.
-	cmd := []string{"printenv", teleport.SSHSessionWebProxyAddr}
+	testEnvVar := func(envVar string) string {
+		return fmt.Sprintf(`test -n "$%s" && echo "%s set"`, envVar, envVar)
+	}
+
+	cmds := []string{
+		fmt.Sprintf("printenv %s", teleport.SSHSessionWebProxyAddr),
+		testEnvVar(teleport.SSHSessionID),
+		testEnvVar(sshutils.SessionEnvVar),
+		fmt.Sprintf(
+			`test "$%s" = "$%s" && echo "session IDs match"`,
+			teleport.SSHSessionID,
+			sshutils.SessionEnvVar,
+		),
+	}
+
+	// Non-interactive sessions should set session-scoped env vars.
+	cmd := []string{
+		"sh",
+		"-c",
+		strings.Join(cmds, ";"),
+	}
 	out := &bytes.Buffer{}
 	tc.Stdout = out
 	tc.Stdin = nil
@@ -2208,14 +2227,29 @@ func testEnvironmentVariables(t *testing.T, suite *integrationTestSuite) {
 	require.NoError(t, err)
 	output := out.String()
 	require.Contains(t, output, tc.WebProxyAddr)
+	require.Contains(t, output, fmt.Sprintf("%s set", teleport.SSHSessionID))
+	require.Contains(t, output, fmt.Sprintf("%s set", sshutils.SessionEnvVar))
+	require.Contains(t, output, "session IDs match")
+
+	// Interactive sessions should also set session-scoped and terminal env vars.
+	cmds = append(cmds,
+		testEnvVar("TERM"),
+		testEnvVar("SSH_TTY"),
+		"exit",
+	)
 
 	term := NewTerminal(250)
 	tc.Stdout = term
-	tc.Stdin = strings.NewReader(strings.Join(cmd, " ") + "\r\nexit\r\n")
+	tc.Stdin = strings.NewReader(strings.Join(cmds, "\r\n") + "\r\n")
 	err = tc.SSH(ctx, nil)
 	require.NoError(t, err)
 	output = term.AllOutput()
 	require.Contains(t, output, tc.WebProxyAddr)
+	require.Contains(t, output, fmt.Sprintf("%s set", teleport.SSHSessionID))
+	require.Contains(t, output, fmt.Sprintf("%s set", sshutils.SessionEnvVar))
+	require.Contains(t, output, "session IDs match")
+	require.Contains(t, output, fmt.Sprintf("%s set", "TERM"))
+	require.Contains(t, output, fmt.Sprintf("%s set", "SSH_TTY"))
 }
 
 // TestInvalidLogins validates that you can't login with invalid login or
