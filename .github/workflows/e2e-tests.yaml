@@ -205,13 +205,13 @@ jobs:
       - name: Setup e2e environment
         run: |
           until docker info >/dev/null 2>&1; do sleep 1; done
-          docker pull debian:bookworm-slim &
+          docker pull debian:bookworm-slim & pid1=$!
 
           corepack enable
-          (pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild electron) &
-          (cd e2e && pnpm install --frozen-lockfile && pnpm type-check) &
+          (pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild electron) & pid2=$!
+          (cd e2e && pnpm install --frozen-lockfile && pnpm type-check) & pid3=$!
 
-          wait
+          wait $pid1 && wait $pid2 && wait $pid3
 
       - uses: actions/download-artifact@v8
         with:
