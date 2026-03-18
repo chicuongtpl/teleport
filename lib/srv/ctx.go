@@ -686,7 +686,7 @@ func (c *ServerContext) AddCloser(closer io.Closer) {
 func (c *ServerContext) AllocateTerm(ch ssh.Channel) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.allocateTerminalUnderLock(ch)
+	return c.allocateTerminalLocked(ch)
 }
 
 // TakeTerm takes a newly or previously allocated Terminal.
@@ -695,7 +695,7 @@ func (c *ServerContext) TakeTerm(ch ssh.Channel) (Terminal, error) {
 	defer c.mu.Unlock()
 
 	// If the terminal is already allocated and has not been taken, this is a noop.
-	if err := c.allocateTerminalUnderLock(ch); err != nil {
+	if err := c.allocateTerminalLocked(ch); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
@@ -706,7 +706,7 @@ func (c *ServerContext) TakeTerm(ch ssh.Channel) (Terminal, error) {
 
 // newTerminal returns a new terminal. Terminal can be local or remote
 // depending on cluster configuration.
-func (c *ServerContext) allocateTerminalUnderLock(ch ssh.Channel) error {
+func (c *ServerContext) allocateTerminalLocked(ch ssh.Channel) error {
 	if c.termAllocated {
 		if c.term == nil {
 			return trace.BadParameter("cannot allocate a terminal if the terminal has already been claimed.")
