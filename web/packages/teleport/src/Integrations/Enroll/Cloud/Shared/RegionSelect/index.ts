@@ -18,4 +18,4 @@
 
 export { RegionSelect } from './RegionSelect';
 export type { RegionSelectProps } from './RegionSelect';
-export type { RegionGroup, Region } from './types';
+export type { RegionGroup, Region, WildcardRegion } from './types';

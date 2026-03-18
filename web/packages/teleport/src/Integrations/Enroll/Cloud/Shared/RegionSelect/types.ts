@@ -25,3 +25,5 @@ export interface RegionGroup {
   name: string;
   regions: readonly Region[];
 }
+
+export type WildcardRegion = ['*'];

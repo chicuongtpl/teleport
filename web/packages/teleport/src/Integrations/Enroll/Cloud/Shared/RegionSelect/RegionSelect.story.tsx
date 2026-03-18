@@ -21,9 +21,13 @@ import { useState } from 'react';
 import Validation from 'shared/components/Validation';
 import { requiredField } from 'shared/components/Validation/rules';
 
-import { Regions as AwsRegion } from 'teleport/services/integrations';
+import {
+  Regions as AwsRegion,
+  AzureRegion,
+} from 'teleport/services/integrations';
 
 import { awsRegionGroups } from '../../Aws/regions';
+import { azureRegionGroups } from '../../Azure/regions';
 import { RegionSelect } from './RegionSelect';
 
 export default {
@@ -40,6 +44,24 @@ export const AWS = () => {
         regionGroups={awsRegionGroups}
         selectedRegions={selectedRegions}
         onChange={(regions: AwsRegion[]) => setSelectedRegions(regions)}
+        label="Select AWS regions"
+        placeholder="Select AWS regions..."
+        required={true}
+        rule={requiredField('At least one region is required')}
+      />
+    </Validation>
+  );
+};
+
+export const Azure = () => {
+  const [selectedRegions, setSelectedRegions] = useState<AzureRegion[]>([]);
+
+  return (
+    <Validation>
+      <RegionSelect
+        regionGroups={azureRegionGroups}
+        selectedRegions={selectedRegions}
+        onChange={(regions: AzureRegion[]) => setSelectedRegions(regions)}
         label="Select AWS regions"
         placeholder="Select AWS regions..."
         required={true}
