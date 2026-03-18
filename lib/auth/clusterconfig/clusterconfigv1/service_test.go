@@ -32,6 +32,9 @@ import (
 
 	"github.com/gravitational/teleport/api/constants"
 	clusterconfigpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/clusterconfig/v1"
+	headerv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/header/v1"
+	scopedaccessv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/access/v1"
+	scopesv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/v1"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/types/clusterconfig"
 	apievents "github.com/gravitational/teleport/api/types/events"
@@ -43,6 +46,7 @@ import (
 	"github.com/gravitational/teleport/lib/events/eventstest"
 	"github.com/gravitational/teleport/lib/modules"
 	"github.com/gravitational/teleport/lib/modules/modulestest"
+	scopedaccess "github.com/gravitational/teleport/lib/scopes/access"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/services/local"
 	"github.com/gravitational/teleport/lib/tlsca"
@@ -91,6 +95,77 @@ func TestGetAuthPreference(t *testing.T) {
 			}
 		})
 	}
+
+	// todo: somehow tie this into the test block above. It feels a little
+	// awkward due to how fake the unscoped authz checker is. maybe rewrite
+	// this whole suite to be "less fake"?
+	t.Run("scoped identity authorized", func(t *testing.T) {
+		// Build a minimal scoped identity with a single role that does not
+		// grant cluster_auth_preference:read.  GetAuthPreference should
+		// still succeed because reading auth preferences is an implicit
+		// permission granted to all identities.
+		bk, err := memory.New(memory.Config{})
+		require.NoError(t, err)
+		t.Cleanup(func() { bk.Close() })
+
+		scopedAccessSvc := local.NewScopedAccessService(bk)
+
+		// Seed a scoped role that only grants access to scoped tokens (not auth prefs).
+		_, err = scopedAccessSvc.CreateScopedRole(t.Context(), &scopedaccessv1.CreateScopedRoleRequest{
+			Role: &scopedaccessv1.ScopedRole{
+				Kind:    scopedaccess.KindScopedRole,
+				Version: types.V1,
+				Metadata: &headerv1.Metadata{
+					Name: "minimal-role",
+				},
+				Scope: "/",
+				Spec: &scopedaccessv1.ScopedRoleSpec{
+					AssignableScopes: []string{"/"},
+					Allow: &scopedaccessv1.ScopedRoleConditions{
+						Rules: []*scopedaccessv1.ScopedRule{
+							{
+								Resources: []string{types.KindScopedToken},
+								Verbs:     []string{types.VerbRead},
+							},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		accessInfo := &services.AccessInfo{
+			Username: "scoped-user",
+			ScopePin: &scopesv1.Pin{
+				Scope: "/",
+				Assignments: map[string]*scopesv1.PinnedAssignments{
+					"/": {Roles: []string{"minimal-role"}},
+				},
+			},
+		}
+
+		scopedCtx, err := services.NewScopedAccessCheckerContext(t.Context(), accessInfo, "test-cluster", scopedAccessSvc)
+		require.NoError(t, err)
+
+		scopedAuthz := fakeScopedAuthorizerFunc(func(ctx context.Context) (*authz.ScopedContext, error) {
+			return &authz.ScopedContext{
+				User: &types.UserV2{
+					Metadata: types.Metadata{Name: accessInfo.Username},
+				},
+				CheckerContext: services.NewScopedSplitAccessCheckerContext(scopedCtx),
+			}, nil
+		})
+
+		env, err := newTestEnv(
+			withScopedAuthorizer(scopedAuthz),
+			withDefaultAuthPreference(types.DefaultAuthPreference()),
+		)
+		require.NoError(t, err, "creating test service")
+
+		got, err := env.GetAuthPreference(context.Background(), &clusterconfigpb.GetAuthPreferenceRequest{})
+		require.NoError(t, err)
+		require.Empty(t, cmp.Diff(types.DefaultAuthPreference(), got, cmpopts.IgnoreFields(types.Metadata{}, "Revision")))
+	})
 }
 
 func TestUpdateAuthPreference(t *testing.T) {
@@ -1652,6 +1727,12 @@ func TestAuditEventsEmitted(t *testing.T) {
 	})
 }
 
+type fakeScopedAuthorizerFunc func(ctx context.Context) (*authz.ScopedContext, error)
+
+func (f fakeScopedAuthorizerFunc) AuthorizeScoped(ctx context.Context) (*authz.ScopedContext, error) {
+	return f(ctx)
+}
+
 type fakeChecker struct {
 	services.AccessChecker
 	rules map[string][]string
@@ -1672,6 +1753,7 @@ func (f fakeChecker) CheckAccessToRule(context services.RuleContext, namespace s
 
 type envConfig struct {
 	authorizer                 authz.Authorizer
+	scopedAuthorizer           authz.ScopedAuthorizer
 	emitter                    apievents.Emitter
 	defaultAuthPreference      types.AuthPreference
 	defaultNetworkingConfig    types.ClusterNetworkingConfig
@@ -1687,6 +1769,12 @@ type serviceOpt = func(config *envConfig)
 func withAuthorizer(authz authz.Authorizer) serviceOpt {
 	return func(config *envConfig) {
 		config.authorizer = authz
+	}
+}
+
+func withScopedAuthorizer(authz authz.ScopedAuthorizer) serviceOpt {
+	return func(config *envConfig) {
+		config.scopedAuthorizer = authz
 	}
 }
 
@@ -1764,12 +1852,33 @@ func newTestEnv(opts ...serviceOpt) (*env, error) {
 		opt(&cfg)
 	}
 
+	scopedAuthz := cfg.scopedAuthorizer
+	if scopedAuthz == nil && cfg.authorizer != nil {
+		scopedAuthz = fakeScopedAuthorizerFunc(func(ctx context.Context) (*authz.ScopedContext, error) {
+			authCtx, err := cfg.authorizer.Authorize(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return authz.ScopedContextFromUnscopedContext(authCtx), nil
+		})
+	}
+
+	// Provide a dummy authorizer if only a scoped authorizer was given, since
+	// NewService requires both.
+	regularAuthz := cfg.authorizer
+	if regularAuthz == nil && scopedAuthz != nil {
+		regularAuthz = authz.AuthorizerFunc(func(ctx context.Context) (*authz.Context, error) {
+			return nil, trace.AccessDenied("dummy authorizer: use scoped authorizer instead")
+		})
+	}
+
 	svc, err := clusterconfigv1.NewService(clusterconfigv1.ServiceConfig{
-		Cache:       cfg.service,
-		Backend:     cfg.service,
-		Authorizer:  cfg.authorizer,
-		Emitter:     cfg.emitter,
-		AccessGraph: cfg.accessGraphConfig,
+		Cache:            cfg.service,
+		Backend:          cfg.service,
+		Authorizer:       regularAuthz,
+		ScopedAuthorizer: scopedAuthz,
+		Emitter:          cfg.emitter,
+		AccessGraph:      cfg.accessGraphConfig,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err, "creating users service")
