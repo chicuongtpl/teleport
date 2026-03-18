@@ -51,6 +51,19 @@ enrolling meets certain criteria. To get started, read [Enhanced Session
 Recording for SSH with
 BPF](../enroll-resources/server-access/guides/bpf-session-recording.mdx).
 
+### Audit event export
+
+You can set up the Teleport Event Handler to export audit events from the
+Teleport Auth Service to a third-party platform like Splunk or Datadog.
+
+To get started, you will need to deploy the Teleport Event Handler, either by
+installing a binary on a Linux server or installing a Helm chart on a Kubernetes
+cluster.
+
+Read [Forwarding Events with
+Fluentd](../zero-trust-access/export-audit-events/fluentd.mdx) to learn the
+basics of how the Event Handler plugin works.
+
 ## Next steps
 
 In the final step of the Getting Started guide, we'll cover how to manage standing and just-in-time access with Identity Governance.
