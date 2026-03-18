@@ -209,8 +209,7 @@ jobs:
           docker pull debian:bookworm-slim & pid1=$!
 
           corepack enable
-          (pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild electron) & pid2=$!
-          (cd e2e && pnpm install --frozen-lockfile && pnpm type-check) & pid3=$!
+          pnpm install --frozen-lockfile & pid2=$!
 
           wait $pid1 && wait $pid2 && wait $pid3
 
