@@ -164,12 +164,19 @@ message SearchSessionSummariesParams {
 
 // EmbeddedQuery pairs a free-text query with its pre-computed vector embedding,
 // produced by the Auth server before forwarding to the access graph.
+// model_name must match EmbeddingChunk.model_name for a meaningful similarity
+// comparison; the access graph skips stored chunks whose model differs.
 message EmbeddedQuery {
   // text is the original query string.
   string text = 1;
   // embeddings is the vector representation of text, typically a
   // high-dimensional float array produced by an embedding model.
   repeated float embeddings = 2;
+  // model_name identifies the embedding model that produced embeddings
+  // (e.g. "text-embedding-3-small"). The access graph uses this to skip stored
+  // EmbeddingChunks produced by a different model, preventing silent ranking
+  // against incompatible vectors after a retrieval model rotation.
+  string model_name = 3;
 }
 
 // ResourceProperties holds session-kind-specific properties for a session.
@@ -397,6 +404,13 @@ message StoreSessionSummaryRequest {
 // session summary, along with metadata about the chunk's position and content.
 // Session summaries are split into chunks to generate more precise embeddings
 // for similarity search.
+//
+// model_name is stored alongside the vector so that the access graph can
+// reject or skip comparisons against query embeddings produced by a different
+// model (e.g. after an admin rotates the retrieval model via
+// UpdateRetrievalModel / UpsertRetrievalModel). Without this field, a model
+// rotation would cause silent ranking against incompatible embeddings for all
+// pre-change sessions.
 message EmbeddingChunk {
   // values is the vector representation of the text chunk, typically a
   // high-dimensional float array produced by an embedding model.
@@ -408,6 +422,11 @@ message EmbeddingChunk {
   // chunk_index is the zero-based position of this chunk within the
   // full session summary.
   uint32 chunk_index = 3;
+
+  // model_name identifies the embedding model that produced values
+  // (e.g. "text-embedding-3-small"). Used to detect incompatible stored
+  // embeddings after a retrieval model rotation.
+  string model_name = 4;
 }
 
 // StoreSessionSummaryResponse is the response returned after successfully

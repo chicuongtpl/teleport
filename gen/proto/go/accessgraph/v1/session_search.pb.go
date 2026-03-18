@@ -325,13 +325,20 @@ func (x *SearchSessionSummariesParams) GetBatchToken() string {
 
 // EmbeddedQuery pairs a free-text query with its pre-computed vector embedding,
 // produced by the Auth server before forwarding to the access graph.
+// model_name must match EmbeddingChunk.model_name for a meaningful similarity
+// comparison; the access graph skips stored chunks whose model differs.
 type EmbeddedQuery struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// text is the original query string.
 	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
 	// embeddings is the vector representation of text, typically a
 	// high-dimensional float array produced by an embedding model.
-	Embeddings    []float32 `protobuf:"fixed32,2,rep,packed,name=embeddings,proto3" json:"embeddings,omitempty"`
+	Embeddings []float32 `protobuf:"fixed32,2,rep,packed,name=embeddings,proto3" json:"embeddings,omitempty"`
+	// model_name identifies the embedding model that produced embeddings
+	// (e.g. "text-embedding-3-small"). The access graph uses this to skip stored
+	// EmbeddingChunks produced by a different model, preventing silent ranking
+	// against incompatible vectors after a retrieval model rotation.
+	ModelName     string `protobuf:"bytes,3,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -378,6 +385,13 @@ func (x *EmbeddedQuery) GetEmbeddings() []float32 {
 		return x.Embeddings
 	}
 	return nil
+}
+
+func (x *EmbeddedQuery) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
 }
 
 // ResourceProperties holds session-kind-specific properties for a session.
@@ -1167,6 +1181,13 @@ func (x *StoreSessionSummaryRequest) GetEmbeddings() []*EmbeddingChunk {
 // session summary, along with metadata about the chunk's position and content.
 // Session summaries are split into chunks to generate more precise embeddings
 // for similarity search.
+//
+// model_name is stored alongside the vector so that the access graph can
+// reject or skip comparisons against query embeddings produced by a different
+// model (e.g. after an admin rotates the retrieval model via
+// UpdateRetrievalModel / UpsertRetrievalModel). Without this field, a model
+// rotation would cause silent ranking against incompatible embeddings for all
+// pre-change sessions.
 type EmbeddingChunk struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// values is the vector representation of the text chunk, typically a
@@ -1176,7 +1197,11 @@ type EmbeddingChunk struct {
 	Chunk string `protobuf:"bytes,2,opt,name=chunk,proto3" json:"chunk,omitempty"`
 	// chunk_index is the zero-based position of this chunk within the
 	// full session summary.
-	ChunkIndex    uint32 `protobuf:"varint,3,opt,name=chunk_index,json=chunkIndex,proto3" json:"chunk_index,omitempty"`
+	ChunkIndex uint32 `protobuf:"varint,3,opt,name=chunk_index,json=chunkIndex,proto3" json:"chunk_index,omitempty"`
+	// model_name identifies the embedding model that produced values
+	// (e.g. "text-embedding-3-small"). Used to detect incompatible stored
+	// embeddings after a retrieval model rotation.
+	ModelName     string `protobuf:"bytes,4,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1230,6 +1255,13 @@ func (x *EmbeddingChunk) GetChunkIndex() uint32 {
 		return x.ChunkIndex
 	}
 	return 0
+}
+
+func (x *EmbeddingChunk) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
 }
 
 // StoreSessionSummaryResponse is the response returned after successfully
@@ -1418,12 +1450,14 @@ const file_accessgraph_v1_session_search_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\v\n" +
 	"\t_usernameB\x10\n" +
 	"\x0e_resource_kindB\x10\n" +
-	"\x0e_resource_name\"C\n" +
+	"\x0e_resource_name\"b\n" +
 	"\rEmbeddedQuery\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x1e\n" +
 	"\n" +
 	"embeddings\x18\x02 \x03(\x02R\n" +
-	"embeddings\"\xd9\x01\n" +
+	"embeddings\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x03 \x01(\tR\tmodelName\"\xd9\x01\n" +
 	"\x12ResourceProperties\x121\n" +
 	"\x03ssh\x18\x01 \x01(\v2\x1d.accessgraph.v1.SSHPropertiesH\x00R\x03ssh\x12F\n" +
 	"\n" +
@@ -1508,12 +1542,14 @@ const file_accessgraph_v1_session_search_proto_rawDesc = "" +
 	"embeddings\x1aA\n" +
 	"\x13ResourceLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"_\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"~\n" +
 	"\x0eEmbeddingChunk\x12\x16\n" +
 	"\x06values\x18\x01 \x03(\x02R\x06values\x12\x14\n" +
 	"\x05chunk\x18\x02 \x01(\tR\x05chunk\x12\x1f\n" +
 	"\vchunk_index\x18\x03 \x01(\rR\n" +
-	"chunkIndex\"\x1d\n" +
+	"chunkIndex\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x04 \x01(\tR\tmodelName\"\x1d\n" +
 	"\x1bStoreSessionSummaryResponse2\x86\x02\n" +
 	"\x17SessionRecordingService\x12{\n" +
 	"\x16SearchSessionSummaries\x12-.accessgraph.v1.SearchSessionSummariesRequest\x1a..accessgraph.v1.SearchSessionSummariesResponse(\x010\x01\x12n\n" +
