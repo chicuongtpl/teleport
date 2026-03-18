@@ -19,6 +19,7 @@
 package app
 
 import (
+	"crypto"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -46,6 +47,10 @@ const (
 	DBSCChallengeDefaultTTL = time.Minute
 	// SecureSessionResponseHeaderName is the DBSC proof JWT header.
 	SecureSessionResponseHeaderName = "Secure-Session-Response"
+	// SecSecureSessionIDHeaderName is the DBSC session identifier header.
+	SecSecureSessionIDHeaderName = "Sec-Secure-Session-Id"
+	// SecureSessionChallengeHeaderName is the DBSC challenge header.
+	SecureSessionChallengeHeaderName = "Secure-Session-Challenge"
 
 	dbscRegistrationAlgorithm = "ES256"
 	dbscProofJWTType          = "dbsc+jwt"
@@ -54,7 +59,9 @@ const (
 	dbscChallengeContextLabel     = "teleport:dbsc:challenge:v1"
 	dbscChallengeMaxLen           = 4096
 	dbscChallengeKindRegistration = "registration"
+	dbscChallengeKindRefresh      = "refresh"
 	dbscBoundSessionCookieMaxAge  = 600
+	dbscSessionIdentifierMaxLen   = 256
 )
 
 type dbscChallengePayload struct {
@@ -74,6 +81,10 @@ type dbscRegistrationProofClaims struct {
 	IAT *jwt.NumericDate `json:"iat,omitempty"`
 	EXP *jwt.NumericDate `json:"exp,omitempty"`
 	NBF *jwt.NumericDate `json:"nbf,omitempty"`
+}
+
+type dbscRefreshProofClaims struct {
+	jwt.Claims
 }
 
 type dbscProofValidationResult struct {
@@ -111,7 +122,7 @@ func createDBSCChallenge(now time.Time, bearerToken, sessionID, kind string, ttl
 	if sessionID == "" {
 		return "", trace.BadParameter("missing app session id")
 	}
-	if kind != dbscChallengeKindRegistration {
+	if kind != dbscChallengeKindRegistration && kind != dbscChallengeKindRefresh {
 		return "", trace.BadParameter("invalid challenge kind %q", kind)
 	}
 	if ttl <= 0 {
@@ -220,6 +231,50 @@ func parseSecureSessionResponseHeader(headerValue string) (string, error) {
 	return value, nil
 }
 
+func parseSecSecureSessionIDHeader(headerValue string) (string, error) {
+	value := strings.TrimSpace(headerValue)
+	if value == "" {
+		return "", trace.BadParameter("missing secure session id")
+	}
+	if strings.HasPrefix(value, "\"") {
+		unquoted, err := strconv.Unquote(value)
+		if err != nil {
+			return "", trace.BadParameter("malformed secure session id")
+		}
+		value = unquoted
+	}
+	if value == "" || len(value) > dbscSessionIdentifierMaxLen || strings.ContainsAny(value, "\r\n;") {
+		return "", trace.BadParameter("malformed secure session id")
+	}
+	return value, nil
+}
+
+func buildSecureSessionChallengeHeader(challenge, sessionIdentifier string) string {
+	return fmt.Sprintf(`%q;id=%q`, challenge, sessionIdentifier)
+}
+
+func parseSecureSessionChallengeHeader(headerValue string) (string, string, error) {
+	value := strings.TrimSpace(headerValue)
+	if value == "" {
+		return "", "", trace.BadParameter("malformed secure session challenge")
+	}
+
+	rawChallenge, rawSessionID, ok := strings.Cut(value, ";id=")
+	if !ok {
+		return "", "", trace.BadParameter("malformed secure session challenge")
+	}
+
+	challenge, err := strconv.Unquote(strings.TrimSpace(rawChallenge))
+	if err != nil || challenge == "" {
+		return "", "", trace.BadParameter("malformed secure session challenge")
+	}
+	sessionID, err := strconv.Unquote(strings.TrimSpace(rawSessionID))
+	if err != nil || sessionID == "" {
+		return "", "", trace.BadParameter("malformed secure session challenge")
+	}
+	return challenge, sessionID, nil
+}
+
 func validateDBSCRegistrationProof(rawProof string, now time.Time, registrationAudience, bearerToken, appSessionID string) (*dbscProofValidationResult, error) {
 	token, err := jwt.ParseSigned(rawProof, []jose.SignatureAlgorithm{jose.ES256})
 	if err != nil {
@@ -280,6 +335,69 @@ func marshalDBSCRegistrationJWK(publicJWK jose.JSONWebKey) (string, error) {
 		return "", trace.Wrap(err)
 	}
 	return string(raw), nil
+}
+
+func unmarshalDBSCRegistrationJWK(rawJWK string) (jose.JSONWebKey, error) {
+	if strings.TrimSpace(rawJWK) == "" {
+		return jose.JSONWebKey{}, trace.NotFound("missing dbsc registration key")
+	}
+
+	var jwk jose.JSONWebKey
+	if err := json.Unmarshal([]byte(rawJWK), &jwk); err != nil {
+		return jose.JSONWebKey{}, trace.BadParameter("malformed dbsc registration key")
+	}
+	if jwk.Key == nil || !jwk.IsPublic() {
+		return jose.JSONWebKey{}, trace.BadParameter("invalid dbsc registration key")
+	}
+	return jwk, nil
+}
+
+func validateDBSCRefreshProof(rawProof string, now time.Time, refreshAudience, sessionIdentifier, bearerToken, appSessionID string, storedJWK jose.JSONWebKey) error {
+	token, err := jwt.ParseSigned(rawProof, []jose.SignatureAlgorithm{jose.ES256})
+	if err != nil {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+	if len(token.Headers) == 0 {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+	header := token.Headers[0]
+	if err := validateDBSCProofHeader(header, dbscRegistrationAlgorithm); err != nil {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+	if header.JSONWebKey == nil || header.JSONWebKey.Key == nil || !header.JSONWebKey.IsPublic() {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+	storedThumbprint, err := storedJWK.Thumbprint(crypto.SHA256)
+	if err != nil {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+	presentedThumbprint, err := header.JSONWebKey.Thumbprint(crypto.SHA256)
+	if err != nil {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+	if subtle.ConstantTimeCompare(storedThumbprint, presentedThumbprint) != 1 {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+
+	var claims dbscRefreshProofClaims
+	if err := token.Claims(storedJWK.Key, &claims); err != nil {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+	if claims.ID == "" || claims.Subject != sessionIdentifier || !claims.Audience.Contains(refreshAudience) {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+	if claims.Expiry != nil && now.After(claims.Expiry.Time()) {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+	if claims.NotBefore != nil && now.Before(claims.NotBefore.Time()) {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+
+	if _, err := validateDBSCChallenge(claims.ID, now, bearerToken, dbscChallengeKindRefresh, appSessionID); err != nil {
+		return trace.AccessDenied("invalid dbsc refresh proof")
+	}
+
+	return nil
 }
 
 func validateDBSCProofHeader(header jose.Header, allowedAlgorithm string) error {

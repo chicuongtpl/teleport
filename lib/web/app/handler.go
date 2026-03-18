@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"path"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -147,6 +148,7 @@ func NewHandler(ctx context.Context, c *HandlerConfig) (*Handler, error) {
 	h.router.GET("/x-teleport-auth", makeRouterHandler(h.startAppAuthExchange))
 	h.router.POST("/x-teleport-auth", makeRouterHandler(h.completeAppAuthExchange))
 	h.router.POST(DBSCRegistrationPath, makeRouterHandler(h.handleDBSCRegistration))
+	h.router.POST(DBSCRefreshPath, makeRouterHandler(h.handleDBSCRefresh))
 	h.router.GET("/teleport-logout", h.withRouterAuth(h.handleLogout))
 	h.router.NotFound = h.withAuth(h.handleHttp)
 
@@ -189,6 +191,58 @@ func (h *Handler) handleDBSCRegistration(w http.ResponseWriter, r *http.Request,
 	return nil
 }
 
+func (h *Handler) handleDBSCRefresh(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Cross-Origin-Resource-Policy", "same-site")
+
+	sessionIdentifier, err := parseSecSecureSessionIDHeader(r.Header.Get(SecSecureSessionIDHeaderName))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	ws, err := h.getAppSessionFromAccessPoint(r.Context(), sessionIdentifier)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "Failed to fetch app session for DBSC refresh", "error", err)
+		return trace.AccessDenied("invalid session")
+	}
+	appSessionID := ws.GetName()
+	registeredJWK, err := getDBSCRegistrationJWKFromSession(ws)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "Failed to load DBSC registration key", "error", err)
+		return trace.AccessDenied("invalid dbsc session")
+	}
+
+	rawProofHeader := strings.TrimSpace(r.Header.Get(SecureSessionResponseHeaderName))
+	if rawProofHeader == "" {
+		return trace.Wrap(h.issueDBSCRefreshChallenge(w, sessionIdentifier, ws.GetBearerToken(), appSessionID))
+	}
+
+	rawProof, err := parseSecureSessionResponseHeader(rawProofHeader)
+	if err != nil {
+		return trace.Wrap(h.issueDBSCRefreshChallenge(w, sessionIdentifier, ws.GetBearerToken(), appSessionID))
+	}
+
+	refreshAudience := "https://" + r.Host + DBSCRefreshPath
+	err = validateDBSCRefreshProof(rawProof, h.c.Clock.Now(), refreshAudience, sessionIdentifier, ws.GetBearerToken(), appSessionID, registeredJWK)
+	if err != nil {
+		return trace.Wrap(h.issueDBSCRefreshChallenge(w, sessionIdentifier, ws.GetBearerToken(), appSessionID))
+	}
+
+	reissueDBSCBoundAppSessionCookie(w, appSessionID)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+func (h *Handler) issueDBSCRefreshChallenge(w http.ResponseWriter, sessionIdentifier, bearerToken, appSessionID string) error {
+	challenge, err := createDBSCChallenge(h.c.Clock.Now(), bearerToken, appSessionID, dbscChallengeKindRefresh, DBSCChallengeDefaultTTL)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	w.Header().Set(SecureSessionChallengeHeaderName, buildSecureSessionChallengeHeader(challenge, sessionIdentifier))
+	w.WriteHeader(http.StatusForbidden)
+	return nil
+}
+
 func (h *Handler) persistDBSCRegistrationJWK(ctx context.Context, ws types.WebSession, publicJWK jose.JSONWebKey) error {
 	wsCopy := ws.Copy()
 	webSession, ok := wsCopy.(*types.WebSessionV2)
@@ -202,6 +256,15 @@ func (h *Handler) persistDBSCRegistrationJWK(ctx context.Context, ws types.WebSe
 	}
 	webSession.Spec.DBSCRegistrationJWK = rawJWK
 	return trace.Wrap(h.c.AuthClient.UpsertAppSession(ctx, webSession))
+}
+
+func getDBSCRegistrationJWKFromSession(ws types.WebSession) (jose.JSONWebKey, error) {
+	webSession, ok := ws.(*types.WebSessionV2)
+	if !ok {
+		return jose.JSONWebKey{}, trace.BadParameter("unsupported web session type %T", ws)
+	}
+
+	return unmarshalDBSCRegistrationJWK(webSession.Spec.DBSCRegistrationJWK)
 }
 
 // HandleConnection handles connections from plain TCP applications.
@@ -576,7 +639,7 @@ func HasFragment(r *http.Request) bool {
 
 // HasDBSCPath checks if the request is coming to a DBSC endpoint.
 func HasDBSCPath(r *http.Request) bool {
-	return r.URL.Path == DBSCRegistrationPath
+	return r.URL.Path == DBSCRegistrationPath || r.URL.Path == DBSCRefreshPath
 }
 
 // HasSessionCookie checks if an application specific cookie exists.

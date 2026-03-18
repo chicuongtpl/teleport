@@ -282,6 +282,36 @@ func setupDBSCTest(t *testing.T) *dbscTestPack {
 	}
 }
 
+// registerDBSCSession performs DBSC registration and returns the private key for refresh proofs.
+func (p *dbscTestPack) registerDBSCSession(t *testing.T) crypto.Signer {
+	t.Helper()
+	challenge, err := createDBSCChallenge(
+		p.clock.Now(),
+		p.appSession.GetBearerToken(),
+		p.appSession.GetName(),
+		dbscChallengeKindRegistration,
+		DBSCChallengeDefaultTTL,
+	)
+	require.NoError(t, err)
+
+	privateKey, publicJWK := mustGenerateDBSCKeyPair(t)
+	audience := "https://" + p.proxy.serverURL.Host + DBSCRegistrationPath
+	proof := mustBuildDBSCRegistrationProofWithKey(t, challenge, audience, privateKey, publicJWK)
+
+	req, err := http.NewRequest(http.MethodPost, "https://"+p.proxy.serverURL.Host+DBSCRegistrationPath, nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: p.appSession.GetName()})
+	req.AddCookie(&http.Cookie{Name: SubjectCookieName, Value: p.appSession.GetBearerToken()})
+	req.Header.Set(SecureSessionResponseHeaderName, proof)
+
+	resp, err := p.client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	return privateKey
+}
+
 func TestDBSCRegistration(t *testing.T) {
 	t.Parallel()
 	p := setupDBSCTest(t)
@@ -333,6 +363,60 @@ func TestDBSCRegistrationRejectsInvalidProof(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
+func TestDBSCRefresh(t *testing.T) {
+	t.Parallel()
+	p := setupDBSCTest(t)
+	privateKey := p.registerDBSCSession(t)
+
+	sessionID := fmt.Sprintf(`%q`, p.appSession.GetName())
+
+	// First request without proof gets a challenge.
+	refreshReq, err := http.NewRequest(http.MethodPost, "https://"+p.proxy.serverURL.Host+DBSCRefreshPath, nil)
+	require.NoError(t, err)
+	refreshReq.Header.Set(SecSecureSessionIDHeaderName, sessionID)
+
+	refreshResp, err := p.client.Do(refreshReq)
+	require.NoError(t, err)
+	defer refreshResp.Body.Close()
+	require.Equal(t, http.StatusForbidden, refreshResp.StatusCode)
+
+	challengeHeader := refreshResp.Header.Get(SecureSessionChallengeHeaderName)
+	require.NotEmpty(t, challengeHeader)
+	challenge, _, err := parseSecureSessionChallengeHeader(challengeHeader)
+	require.NoError(t, err)
+
+	// Second request with signed proof succeeds.
+	refreshProof := mustBuildDBSCRefreshProof(t, challenge, p.appSession.GetName(),
+		"https://"+p.proxy.serverURL.Host+DBSCRefreshPath, privateKey)
+
+	retryReq, err := http.NewRequest(http.MethodPost, "https://"+p.proxy.serverURL.Host+DBSCRefreshPath, nil)
+	require.NoError(t, err)
+	retryReq.Header.Set(SecSecureSessionIDHeaderName, sessionID)
+	retryReq.Header.Set(SecureSessionResponseHeaderName, refreshProof)
+
+	retryResp, err := p.client.Do(retryReq)
+	require.NoError(t, err)
+	defer retryResp.Body.Close()
+	require.Equal(t, http.StatusOK, retryResp.StatusCode)
+	require.Contains(t, retryResp.Header.Get("Set-Cookie"), "Max-Age=600")
+}
+
+func TestDBSCRefreshRequiresRegistration(t *testing.T) {
+	t.Parallel()
+	p := setupDBSCTest(t)
+
+	// Try to refresh without registering first.
+	req, err := http.NewRequest(http.MethodPost, "https://"+p.proxy.serverURL.Host+DBSCRefreshPath, nil)
+	require.NoError(t, err)
+	req.Header.Set(SecSecureSessionIDHeaderName, fmt.Sprintf(`%q`, p.appSession.GetName()))
+
+	resp, err := p.client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	require.Empty(t, resp.Header.Get(SecureSessionChallengeHeaderName))
 }
 
 func TestHasName(t *testing.T) {
@@ -767,6 +851,37 @@ func mustBuildDBSCRegistrationProofWithKey(t *testing.T, challenge, audience str
 		JTI: challenge,
 		JWK: &publicJWK,
 		Aud: []string{audience},
+	}).Serialize()
+	require.NoError(t, err)
+
+	return token
+}
+
+func mustBuildDBSCRefreshProof(t *testing.T, challenge, sessionIdentifier, audience string, privateKey crypto.Signer) string {
+	t.Helper()
+	publicJWK := jose.JSONWebKey{
+		Algorithm: string(jose.ES256),
+		Key:       privateKey.Public(),
+		Use:       "sig",
+	}
+	return mustBuildDBSCRefreshProofWithJWK(t, challenge, sessionIdentifier, audience, privateKey, publicJWK)
+}
+
+func mustBuildDBSCRefreshProofWithJWK(t *testing.T, challenge, sessionIdentifier, audience string, privateKey crypto.Signer, publicJWK jose.JSONWebKey) string {
+	t.Helper()
+
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.ES256, Key: privateKey},
+		(&jose.SignerOptions{}).WithType(dbscProofJWTType).WithHeader(jose.HeaderKey("jwk"), publicJWK),
+	)
+	require.NoError(t, err)
+
+	token, err := jwt.Signed(signer).Claims(jwt.Claims{
+		ID:       challenge,
+		Subject:  sessionIdentifier,
+		Audience: jwt.Audience{audience},
+		IssuedAt: jwt.NewNumericDate(time.Now()),
+		Expiry:   jwt.NewNumericDate(time.Now().Add(time.Minute)),
 	}).Serialize()
 	require.NoError(t, err)
 
