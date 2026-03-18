@@ -888,22 +888,34 @@ func RunNetworking() (code int, err error) {
 
 func handleNetworkingRequest(ctx context.Context, conn *net.UnixConn, req networking.Request) []string {
 	defer conn.Close()
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	requestClosed := make(chan struct{})
 	go func() {
 		defer cancel()
 		_, _ = conn.Read(make([]byte, 1))
+		close(requestClosed)
 	}()
 
-	netFile, filePaths, err := createNetworkingFile(ctx, req)
+	netFile, filePaths, err := createNetworkingFile(requestCtx, req)
 	if err != nil {
 		conn.Write([]byte(trace.Wrap(err, "failed to create networking file").Error()))
 		return nil
 	}
-	defer netFile.Close()
+	keepOpen := req.Operation == networking.NetworkingOperationDial
+	if !keepOpen {
+		defer netFile.Close()
+	}
 
 	if _, _, err := uds.WriteWithFDs(conn, nil, []*os.File{netFile}); err != nil {
+		if keepOpen {
+			netFile.Close()
+		}
 		conn.Write([]byte(trace.Wrap(err, "failed to write networking file to control conn").Error()))
 		return nil
+	}
+	if keepOpen {
+		<-requestClosed
+		_ = netFile.Close()
 	}
 	return filePaths
 }
