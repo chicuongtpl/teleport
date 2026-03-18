@@ -139,14 +139,14 @@ jobs:
           retention-days: 1
 
       - name: Save Go module cache
-        if: github.event_name == 'push' && steps.go-mod-cache.outputs.cache-hit != 'true'
+        if: steps.go-mod-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.cache-paths.outputs.go-mod }}
           key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
 
       - name: Save Rust output cache
-        if: github.event_name == 'push' && steps.rust-cache.outputs.cache-hit != 'true'
+        if: steps.rust-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -157,7 +157,7 @@ jobs:
             'lib/srv/desktop/rdp/rdpclient/**/*.rs', 'crates/**/*.rs', 'web/packages/shared/libs/ironrdp/**/*.rs') }}
 
       - name: Save pnpm cache
-        if: github.event_name == 'push' && steps.pnpm-cache.outputs.cache-hit != 'true'
+        if: steps.pnpm-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: node_modules
