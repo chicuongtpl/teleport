@@ -1528,7 +1528,7 @@ manualy testing.
   - [ ] Self-hosted Postgres.
     - [ ] verify that cancelling a Postgres request works. (`select pg_sleep(10)` followed by ctrl-c is a good query to test.)
   - [ ] Self-hosted MySQL.
-    - [ ] MySQL server version reported by Teleport is correct.
+    - [ ] MySQL server version reported by Teleport is correct. You can use `SELECT VERSION();` for this.
   - [ ] Self-hosted MariaDB.
   - [ ] Self-hosted MongoDB.
   - [ ] Self-hosted CockroachDB.
