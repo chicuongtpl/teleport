@@ -18,26 +18,15 @@
 
 import { useMemo, useState } from 'react';
 import { Link as InternalLink } from 'react-router';
-import styled from 'styled-components';
 
-import {
-  Box,
-  ButtonPrimary,
-  ButtonSecondary,
-  Flex,
-  Subtitle1,
-  Text,
-} from 'design';
+import { Box, ButtonSecondary, Flex, Subtitle1, Text } from 'design';
 import FieldInput from 'shared/components/FieldInput';
-import { InfoGuideContainer } from 'shared/components/SlidingSidePanel/InfoGuide';
 import Validation from 'shared/components/Validation';
 import { requiredIntegrationName } from 'shared/components/Validation/rules';
 
-import { SlidingSidePanel } from 'teleport/components/SlidingSidePanel/SlidingSidePanel';
 import cfg from 'teleport/config';
 import { Header } from 'teleport/Discover/Shared';
 import { useNoMinWidth } from 'teleport/Main';
-import { zIndexMap } from 'teleport/Navigation/zIndexMap';
 import {
   Regions as AwsRegion,
   IntegrationKind,
@@ -45,19 +34,27 @@ import {
 import { IntegrationEnrollKind } from 'teleport/services/userEvent/types';
 import { useClusterVersion } from 'teleport/useClusterVersion';
 
-import { useCloudIntegration } from '../Shared';
-import { DeploymentMethodSection } from './DeploymentMethodSection';
+import {
+  CheckIntegrationButton,
+  CircleNumber,
+  Container,
+  Divider,
+  RegionsSection as BaseRegionsSection,
+  RegionsSectionProps,
+  useCloudIntegration,
+} from '../Shared';
 import {
   ContentWithSidePanel,
-  InfoGuideContent,
   InfoGuideSwitch,
-  InfoGuideTab,
-  InfoGuideTitle,
   PANEL_WIDTH,
   TerraformInfoGuide,
-} from './InfoGuide';
+  TerraformInfoGuideSidePanel,
+  useTerraformInfoGuide,
+} from '../Shared/InfoGuide';
+import { DeploymentMethodSection } from './DeploymentMethodSection';
+import { InfoGuideContent } from './InfoGuide';
 import { Prerequisites } from './Prerequisites';
-import { RegionsSection } from './RegionsSection';
+import { awsRegionGroups } from './regions';
 import { ResourcesSection } from './ResourcesSection';
 import { buildTerraformConfig } from './tf_module';
 import { Ec2Config, WildcardRegion } from './types';
@@ -98,18 +95,8 @@ export function EnrollAws() {
     [integrationName, regions, ec2Config, clusterVersion]
   );
 
-  const [isPanelOpen, setIsPanelOpen] = useState(true);
-  const [activeInfoGuideTab, setActiveInfoGuideTab] =
-    useState<InfoGuideTab>('terraform');
-
-  const onInfoGuideClick = (section: InfoGuideTab) => {
-    if (isPanelOpen && activeInfoGuideTab === section) {
-      setIsPanelOpen(false);
-    } else {
-      setActiveInfoGuideTab(section);
-      setIsPanelOpen(true);
-    }
-  };
+  const { isPanelOpen, activeInfoGuideTab, setActiveInfoGuideTab, onInfoGuideClick } =
+    useTerraformInfoGuide();
 
   return (
     <Validation>
@@ -170,25 +157,11 @@ export function EnrollAws() {
               />
             </Container>
             <Box mb={2}>
-              <ButtonPrimary
-                as={
-                  integrationExists && integrationName
-                    ? InternalLink
-                    : undefined
-                }
-                to={
-                  integrationExists && integrationName
-                    ? cfg.getIaCIntegrationRoute(
-                        IntegrationKind.AwsOidc,
-                        integrationName
-                      )
-                    : undefined
-                }
-                disabled={!integrationExists || !integrationName}
-                gap={2}
-              >
-                View Integration
-              </ButtonPrimary>
+              <CheckIntegrationButton
+                integrationExists={integrationExists}
+                integrationName={integrationName}
+                integrationKind={IntegrationKind.AwsOidc}
+              />
               <ButtonSecondary
                 ml={3}
                 as={InternalLink}
@@ -199,36 +172,22 @@ export function EnrollAws() {
             </Box>
           </ContentWithSidePanel>
 
-          <SlidingSidePanel
-            isVisible={isPanelOpen}
-            skipAnimation={false}
+          <TerraformInfoGuideSidePanel
             panelWidth={PANEL_WIDTH}
-            zIndex={zIndexMap.infoGuideSidePanel}
-            slideFrom="right"
-          >
-            <InfoGuideContainer
-              onClose={() => setIsPanelOpen(false)}
-              title={
-                <InfoGuideTitle
-                  activeSection={activeInfoGuideTab}
-                  onSectionChange={setActiveInfoGuideTab}
-                />
-              }
-            >
-              {activeInfoGuideTab === 'terraform' ? (
-                <TerraformInfoGuide
-                  terraformConfig={terraformConfig}
-                  handleCopy={() => {
-                    if (validator.validate() && terraformConfig) {
-                      copyTerraformConfig(terraformConfig);
-                    }
-                  }}
-                />
-              ) : (
-                <InfoGuideContent />
-              )}
-            </InfoGuideContainer>
-          </SlidingSidePanel>
+            activeTab={activeInfoGuideTab}
+            onTabChange={setActiveInfoGuideTab}
+            InfoGuideContent={<InfoGuideContent />}
+            TerraformContent={
+              <TerraformInfoGuide
+                terraformConfig={terraformConfig}
+                handleCopy={() => {
+                  if (validator.validate() && terraformConfig) {
+                    copyTerraformConfig(terraformConfig);
+                  }
+                }}
+              />
+            }
+          />
         </Box>
       )}
     </Validation>
@@ -300,35 +259,14 @@ export function ConfigurationScopeSection() {
   );
 }
 
-export const Container = styled(Flex)`
-  border-radius: 8px;
-  background: ${props => props.theme.colors.levels.elevated};
-
-  box-shadow:
-    0 2px 1px -1px rgba(0, 0, 0, 0.2),
-    0 1px 1px 0 rgba(0, 0, 0, 0.14),
-    0 1px 3px 0 rgba(0, 0, 0, 0.12);
-`;
-
-export const CircleNumber = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: ${p => p.theme.space[3]}px;
-  height: ${p => p.theme.space[3]}px;
-  border: 1px solid ${p => p.theme.colors.text.main};
-  color: ${p => p.theme.colors.text.main};
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 500;
-  margin-right: ${p => p.theme.space[2]}px;
-  flex-shrink: 0;
-  box-sizing: border-box;
-`;
-
-export const Divider = styled.hr`
-  margin-top: ${p => p.theme.space[3]}px;
-  margin-bottom: ${p => p.theme.space[3]}px;
-  border: 1px solid ${p => p.theme.colors.interactive.tonal.neutral[0]};
-  width: 100%;
-`;
+export function RegionsSection(
+  props: Omit<RegionsSectionProps<AwsRegion>, 'regionGroups'>
+) {
+  return (
+    <BaseRegionsSection
+      regions={props.regions}
+      regionGroups={awsRegionGroups}
+      onChange={props.onChange}
+    />
+  );
+}

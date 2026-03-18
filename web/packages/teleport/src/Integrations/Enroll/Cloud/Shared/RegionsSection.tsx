@@ -24,24 +24,32 @@ import { Rule } from 'shared/components/Validation/rules';
 
 import { Regions as AwsRegion } from 'teleport/services/integrations';
 
-import { RegionMultiSelector } from '../RegionMultiSelector';
-import { CircleNumber } from './EnrollAws';
-import { awsRegionGroups } from './regions';
-import { WildcardRegion } from './types';
+import { CircleNumber } from './common';
+import { RegionSelect, RegionGroup } from './RegionSelect';
 
-type RegionsOrWildcard = WildcardRegion | AwsRegion[];
+export type WildcardRegion = ['*'];
 
-type RegionsSectionProps = {
-  regions: RegionsOrWildcard;
-  onChange: (regions: RegionsOrWildcard) => void;
+type CloudRegion = AwsRegion; // | AzureRegion, etc
+
+type RegionsOrWildcard<T extends CloudRegion> = T[] | WildcardRegion;
+
+export type RegionsSectionProps<T extends CloudRegion> = {
+  regions: RegionsOrWildcard<T>;
+  regionGroups: readonly RegionGroup[];
+  onChange: (regions: RegionsOrWildcard<T>) => void;
 };
 
-const isWildcard = (regions: RegionsOrWildcard): regions is WildcardRegion =>
-  regions.length === 1 && regions[0] === '*';
+const isWildcard = <T extends CloudRegion>(
+  regions: RegionsOrWildcard<T>
+): regions is WildcardRegion => regions.length === 1 && regions[0] === '*';
 
-export function RegionsSection({ regions, onChange }: RegionsSectionProps) {
-  const requiredAtLeastOneRegion: Rule<RegionsOrWildcard> =
-    (regions: RegionsOrWildcard) => () => {
+export function RegionsSection<T extends CloudRegion>({
+  regions,
+  regionGroups,
+  onChange,
+}: RegionsSectionProps<T>) {
+  const requiredAtLeastOneRegion: Rule<RegionsOrWildcard<T>> =
+    (regions: RegionsOrWildcard<T>) => () => {
       if (isWildcard(regions)) {
         return { valid: true };
       }
@@ -62,7 +70,7 @@ export function RegionsSection({ regions, onChange }: RegionsSectionProps) {
         Regions
       </Flex>
       <Text mb={3} ml={4}>
-        Select the AWS regions where your resources are located.
+        Select the regions where your resources are located.
       </Text>
       <Box ml={4}>
         <FieldRadio
@@ -92,10 +100,10 @@ export function RegionsSection({ regions, onChange }: RegionsSectionProps) {
 
         {!isWildcard(regions) && (
           <Box mt={3}>
-            <RegionMultiSelector
-              regionGroups={awsRegionGroups}
+            <RegionSelect
+              regionGroups={regionGroups}
               selectedRegions={regions}
-              onChange={regions => onChange(regions)}
+              onChange={onChange}
               disabled={false}
               required={true}
               rule={requiredAtLeastOneRegion}

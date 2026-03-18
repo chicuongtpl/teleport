@@ -29,7 +29,7 @@ import { useValidation } from 'shared/components/Validation';
 import cfg from 'teleport/config';
 import { IntegrationKind } from 'teleport/services/integrations';
 
-import { CircleNumber } from './EnrollAws';
+import { CircleNumber } from '../Shared';
 
 export function CopyTerraformButton({
   onClick,

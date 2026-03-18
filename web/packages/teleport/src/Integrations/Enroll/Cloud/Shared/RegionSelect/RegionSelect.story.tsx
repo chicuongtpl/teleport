@@ -23,12 +23,12 @@ import { requiredField } from 'shared/components/Validation/rules';
 
 import { Regions as AwsRegion } from 'teleport/services/integrations';
 
-import { awsRegionGroups } from '../Aws/regions';
-import { RegionMultiSelector } from './RegionMultiSelector';
+import { awsRegionGroups } from '../../Aws/regions';
+import { RegionSelect } from './RegionSelect';
 
 export default {
-  title: 'Teleport/Integrations/Enroll/Cloud/RegionMultiSelector',
-  component: RegionMultiSelector,
+  title: 'Teleport/Integrations/Enroll/Cloud/RegionSelect',
+  component: RegionSelect,
 };
 
 export const AWS = () => {
@@ -36,10 +36,10 @@ export const AWS = () => {
 
   return (
     <Validation>
-      <RegionMultiSelector
+      <RegionSelect
         regionGroups={awsRegionGroups}
         selectedRegions={selectedRegions}
-        onChange={setSelectedRegions}
+        onChange={(regions: AwsRegion[]) => setSelectedRegions(regions)}
         label="Select AWS regions"
         placeholder="Select AWS regions..."
         required={true}
