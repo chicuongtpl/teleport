@@ -48,9 +48,12 @@ Assign the predefined [`roles/alloydb.client`](https://cloud.google.com/alloydb/
 
 Set <Var name="project-id" /> to your GCP project ID.
 ```code
+# 1. Create the Service Account explicitly in the target project
 $ gcloud iam service-accounts create teleport-db-service \
-    --display-name="Teleport Database Service"
+    --display-name="Teleport Database Service" \
+    --project=<Var name="project-id" />
 
+# 2. Grant the role to that specific account
 $ gcloud projects add-iam-policy-binding <Var name="project-id" /> \
     --member="serviceAccount:teleport-db-service@<Var name="project-id" />.iam.gserviceaccount.com" \
     --role="roles/alloydb.client"
@@ -81,15 +84,14 @@ Then, on the `alloydb-user` overview page, go to the "Principals with Access" ta
 <TabItem label="gcloud CLI">
 
 ```code
-$ gcloud iam service-accounts create alloydb-user \
-    --display-name="AlloyDB User"
+$ gcloud iam service-accounts create alloydb-user --display-name="AlloyDB User"  --project=<Var name="project-id" />
 
 $ for role in roles/alloydb.databaseUser roles/alloydb.client roles/serviceusage.serviceUsageConsumer;
-do \
-    gcloud projects add-iam-policy-binding <Var name="project-id" /> \
-      --member="serviceAccount:alloydb-user@<Var name="project-id" />.iam.gserviceaccount.com" \
-      --role="$role"; \
-  done
+  do \
+  gcloud projects add-iam-policy-binding <Var name="project-id" /> \
+    --member="serviceAccount:alloydb-user@<Var name="project-id" />.iam.gserviceaccount.com" \
+    --role="$role"; \
+  done \
 
 $ gcloud iam service-accounts add-iam-policy-binding \
     alloydb-user@<Var name="project-id" />.iam.gserviceaccount.com \
@@ -115,7 +117,10 @@ is enabled on your instance (the `alloydb.iam_authentication` flag must be set).
 1. Go to the Users page of your AlloyDB instance.
 2. Click Add User Account.
 3. Choose Cloud IAM authentication.
-4. Add alloydb-user.
+4. In the Principal field, enter `alloydb-user@<Var name="project-id" />.iam`.
+5. Go to the AlloyDB Clusters page.
+6. Click Edit on your primary-instance, scroll to Advanced configuration options, 
+   and under Flags ensure `alloydb.iam_authentication` is present and set to on.
 
 </TabItem>
 <TabItem label="gcloud CLI">
@@ -126,8 +131,23 @@ is enabled on your instance (the `alloydb.iam_authentication` flag must be set).
 $ gcloud alloydb instances update <Var name="instance-name" /> \
     --cluster=<Var name="cluster-name" /> \
     --region=<Var name="region" /> \
+    --project=<Var name="project-id" /> \
     --database-flags=alloydb.iam_authentication=on
 ```
+<Admonition type="warning">
+If your instance already has custom database flags, include them in the
+`--database-flags` list along with `alloydb.iam_authentication=on`. Any flags
+you omit are reset to their default values.
+
+To review the instance's current manually set flags:
+
+```code
+$ gcloud alloydb instances describe <Var name="instance-name" /> \
+    --cluster=<Var name="cluster-name" /> \
+    --region=<Var name="region" />
+```
+</Admonition>
+
   Create the IAM-based database user to link the service account to the database:
 
 ```code
