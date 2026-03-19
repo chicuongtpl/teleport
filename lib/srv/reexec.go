@@ -889,11 +889,12 @@ func RunNetworking() (code int, err error) {
 func handleNetworkingRequest(ctx context.Context, conn *net.UnixConn, req networking.Request) []string {
 	defer conn.Close()
 	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	requestClosed := make(chan struct{})
+
+	done := make(chan struct{})
 	go func() {
 		defer cancel()
 		_, _ = conn.Read(make([]byte, 1))
-		close(requestClosed)
+		close(done)
 	}()
 
 	netFile, filePaths, err := createNetworkingFile(requestCtx, req)
@@ -901,26 +902,17 @@ func handleNetworkingRequest(ctx context.Context, conn *net.UnixConn, req networ
 		conn.Write([]byte(trace.Wrap(err, "failed to create networking file").Error()))
 		return nil
 	}
-	//keepOpen := req.Operation == networking.NetworkingOperationDial
-	var keepOpen bool
-	if req.Operation == networking.NetworkingOperationDial || req.Operation == networking.NetworkingOperationListen {
-		keepOpen = true
-	}
-	if !keepOpen {
-		defer netFile.Close()
-	}
+	defer netFile.Close()
 
 	if _, _, err := uds.WriteWithFDs(conn, nil, []*os.File{netFile}); err != nil {
-		if keepOpen {
-			netFile.Close()
-		}
 		conn.Write([]byte(trace.Wrap(err, "failed to write networking file to control conn").Error()))
 		return nil
 	}
-	if keepOpen {
-		<-requestClosed
-		_ = netFile.Close()
-	}
+
+	// Block here until the parent closes conn (the socket over which it sends
+	// requests) which signals that it has gotten the fds and and they can be
+	// closed in the child.
+	<-done
 	return filePaths
 }
 
