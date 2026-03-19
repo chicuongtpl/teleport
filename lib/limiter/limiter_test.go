@@ -127,7 +127,7 @@ func TestCustomRate(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	customRate := ratelimit.NewRateSet()
+	customRate := ratelimit.NewNamedRateSet("custom")
 	err = customRate.Add(time.Minute, 1, 5)
 	require.NoError(t, err)
 
@@ -139,15 +139,16 @@ func TestCustomRate(t *testing.T) {
 	// Test rate limit exceeded with custom rate.
 	require.Error(t, limiter.RegisterRequestWithCustomRate("token1", customRate))
 
-	// A single non-custom request should succeed,
-	// but the custom rate should still be limited.
+	// A default-rate request must not reset the custom bucket.
 	require.NoError(t, limiter.RegisterRequest("token1"))
 	require.Error(t, limiter.RegisterRequestWithCustomRate("token1", customRate))
 
-	// Test default rate still works.
-	for range 20 {
+	// Test default rate still works. One default-rate request was
+	// already made above, so 19 more should exhaust the burst of 20.
+	for range 19 {
 		require.NoError(t, limiter.RegisterRequest("token1"))
 	}
+	require.Error(t, limiter.RegisterRequest("token1"))
 }
 
 type mockAddr struct{}
@@ -196,7 +197,7 @@ func TestLimiter_UnaryServerInterceptor(t *testing.T) {
 	require.Error(t, err)
 
 	getCustomRate := func(endpoint string) *ratelimit.RateSet {
-		rates := ratelimit.NewRateSet()
+		rates := ratelimit.NewNamedRateSet("custom")
 		err := rates.Add(2*time.Minute, 1, 2)
 		require.NoError(t, err)
 		return rates
@@ -505,4 +506,84 @@ func TestRateLimiter_IsRateLimited(t *testing.T) {
 	clock.Advance(time.Minute)
 	// After time passes, token1 should not be rate limited anymore
 	require.False(t, limiter.IsRateLimited("token1"))
+}
+
+func TestCustomRateNotClobberedByDefault(t *testing.T) {
+	clock := clockwork.NewFakeClock()
+	limiter, err := NewLimiter(Config{
+		Clock: clock,
+		Rates: []Rate{{Period: 10 * time.Millisecond, Average: 10, Burst: 20}},
+	})
+	require.NoError(t, err)
+
+	customRate := ratelimit.NewNamedRateSet("account-recovery")
+	require.NoError(t, customRate.Add(time.Minute, 1, 5))
+
+	getCustomRate := func(endpoint string) *ratelimit.RateSet {
+		if endpoint == "/recovery" {
+			return customRate
+		}
+		return nil
+	}
+
+	ctx := peer.NewContext(context.Background(), &peer.Peer{Addr: mockAddr{}})
+	handler := func(context.Context, any) (any, error) { return nil, nil }
+	interceptor := limiter.UnaryServerInterceptorWithCustomRate(getCustomRate)
+
+	recoveryInfo := &grpc.UnaryServerInfo{FullMethod: "/recovery"}
+	defaultInfo := &grpc.UnaryServerInfo{FullMethod: "/default"}
+
+	// Exhaust the custom rate bucket (burst 5).
+	for range 5 {
+		_, err := interceptor(ctx, nil, recoveryInfo, handler)
+		require.NoError(t, err)
+	}
+	_, err = interceptor(ctx, nil, recoveryInfo, handler)
+	require.Error(t, err)
+
+	// A default-rate request must not reset the custom bucket.
+	_, err = interceptor(ctx, nil, defaultInfo, handler)
+	require.NoError(t, err)
+
+	// Custom rate must still be exhausted.
+	_, err = interceptor(ctx, nil, recoveryInfo, handler)
+	require.Error(t, err)
+}
+
+func TestNilCustomRateSharesDefaultBucket(t *testing.T) {
+	limiter, err := NewLimiter(Config{
+		Rates: []Rate{{Period: 10 * time.Millisecond, Average: 10, Burst: 10}},
+	})
+	require.NoError(t, err)
+
+	// Exhaust the default bucket.
+	for range 10 {
+		require.NoError(t, limiter.RegisterRequest("token1"))
+	}
+	require.Error(t, limiter.RegisterRequest("token1"))
+
+	// A nil custom rate uses the same default bucket.
+	require.Error(t, limiter.RegisterRequestWithCustomRate("token1", nil))
+}
+
+func TestNamedRateIsolation(t *testing.T) {
+	limiter, err := NewLimiter(Config{
+		Rates: []Rate{{Period: 10 * time.Millisecond, Average: 10, Burst: 20}},
+	})
+	require.NoError(t, err)
+
+	rateA := ratelimit.NewNamedRateSet("a")
+	require.NoError(t, rateA.Add(time.Minute, 1, 2))
+
+	rateB := ratelimit.NewNamedRateSet("b")
+	require.NoError(t, rateB.Add(time.Minute, 1, 2))
+
+	// Exhaust bucket A.
+	for range 2 {
+		require.NoError(t, limiter.RegisterRequestWithCustomRate("ip", rateA))
+	}
+	require.Error(t, limiter.RegisterRequestWithCustomRate("ip", rateA))
+
+	// Bucket B for the same IP must still have capacity.
+	require.NoError(t, limiter.RegisterRequestWithCustomRate("ip", rateB))
 }
