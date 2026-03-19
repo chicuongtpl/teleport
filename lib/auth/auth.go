@@ -6856,25 +6856,8 @@ func (a *Server) syncDesktopsLimitAlert(ctx context.Context) {
 
 // desktopsLimitExceeded checks if number of non-AD desktops exceeds limit for OSS distribution. Returns always false for Enterprise.
 func (a *Server) desktopsLimitExceeded(ctx context.Context) (bool, error) {
-	if modules.GetModules().IsEnterpriseBuild() {
-		return false, nil
-	}
-
-	desktops := stream.FilterMap(
-		a.streamWindowsDesktops(ctx, types.ListWindowsDesktopsRequest{Limit: 50}),
-		func(d types.WindowsDesktop) (struct{}, bool) {
-			return struct{}{}, d.NonAD()
-		},
-	)
-	count := 0
-	for desktops.Next() {
-		count++
-		if count > OSSDesktopsLimit {
-			desktops.Done()
-			return true, nil
-		}
-	}
-	return false, trace.Wrap(desktops.Done())
+	// This limit is only relevant for OSS distribution, so if the license is present and valid, we can skip the check.
+	return false, nil
 }
 
 func (a *Server) syncDynamicLabelsAlert(ctx context.Context) {
